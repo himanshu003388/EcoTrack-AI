@@ -1,0 +1,11 @@
+node_modules
+dist
+ecotrack.db
+.env
+.git
+.github
+.idea
+.vscode
+*.log
+Dockerfile
+.dockerignore

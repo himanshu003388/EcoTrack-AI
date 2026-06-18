@@ -1,0 +1,9 @@
+.gcloudignore
+.git
+.github
+node_modules/
+dist/
+ecotrack.db
+.env
+*.db
+*.log

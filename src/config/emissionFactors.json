@@ -1,0 +1,136 @@
+{
+  "transport": {
+    "car_petrol": {
+      "value": 0.18,
+      "unit": "kg CO2e / km",
+      "source": "US EPA (2023)",
+      "updatedDate": "2023-03-15"
+    },
+    "car_diesel": {
+      "value": 0.17,
+      "unit": "kg CO2e / km",
+      "source": "UK DEFRA (2023)",
+      "updatedDate": "2023-06-20"
+    },
+    "car_ev": {
+      "value": 0.05,
+      "unit": "kg CO2e / km",
+      "source": "IPCC / EPA Lifecycle Average",
+      "updatedDate": "2023-09-10"
+    },
+    "bike": {
+      "value": 0.0,
+      "unit": "kg CO2e / km",
+      "source": "Direct Zero Emission",
+      "updatedDate": "2023-01-01"
+    },
+    "walking": {
+      "value": 0.0,
+      "unit": "kg CO2e / km",
+      "source": "Direct Zero Emission",
+      "updatedDate": "2023-01-01"
+    },
+    "bus": {
+      "value": 0.08,
+      "unit": "kg CO2e / km",
+      "source": "UK DEFRA (2023)",
+      "updatedDate": "2023-06-20"
+    },
+    "train": {
+      "value": 0.04,
+      "unit": "kg CO2e / km",
+      "source": "UK DEFRA (2023)",
+      "updatedDate": "2023-06-20"
+    },
+    "flights": {
+      "value": 0.15,
+      "unit": "kg CO2e / km",
+      "source": "UK DEFRA / ICAO (2023)",
+      "updatedDate": "2023-08-05"
+    },
+    "ride_sharing": {
+      "value": 0.12,
+      "unit": "kg CO2e / km",
+      "source": "EPA average occupancy adjust",
+      "updatedDate": "2023-05-18"
+    }
+  },
+  "energy": {
+    "electricity": {
+      "value": 0.38,
+      "unit": "kg CO2e / kWh",
+      "source": "US EPA eGRID (2023)",
+      "updatedDate": "2023-02-28"
+    },
+    "lpg": {
+      "value": 1.51,
+      "unit": "kg CO2e / liter",
+      "source": "UK DEFRA (2023)",
+      "updatedDate": "2023-06-20"
+    },
+    "natural_gas": {
+      "value": 2.02,
+      "unit": "kg CO2e / m3",
+      "source": "UK DEFRA (2023)",
+      "updatedDate": "2023-06-20"
+    },
+    "solar": {
+      "value": 0.0,
+      "unit": "kg CO2e / kWh",
+      "source": "Direct Zero Emission",
+      "updatedDate": "2023-01-01"
+    }
+  },
+  "food": {
+    "meat": {
+      "value": 5.8,
+      "unit": "kg CO2e / meal",
+      "source": "IPCC / Poore & Nemecek (Oxford, 2018)",
+      "updatedDate": "2023-04-12"
+    },
+    "dairy": {
+      "value": 2.4,
+      "unit": "kg CO2e / meal",
+      "source": "IPCC / Poore & Nemecek (Oxford, 2018)",
+      "updatedDate": "2023-04-12"
+    },
+    "vegetarian": {
+      "value": 1.2,
+      "unit": "kg CO2e / meal",
+      "source": "IPCC / Poore & Nemecek (Oxford, 2018)",
+      "updatedDate": "2023-04-12"
+    },
+    "vegan": {
+      "value": 0.5,
+      "unit": "kg CO2e / meal",
+      "source": "IPCC / Poore & Nemecek (Oxford, 2018)",
+      "updatedDate": "2023-04-12"
+    }
+  },
+  "shopping_waste": {
+    "shopping": {
+      "value": 8.0,
+      "unit": "kg CO2e / kg",
+      "source": "UK DEFRA Consumer Goods",
+      "updatedDate": "2023-06-20"
+    },
+    "deliveries": {
+      "value": 1.4,
+      "unit": "kg CO2e / delivery",
+      "source": "EPA Lifecycle Freight Avg",
+      "updatedDate": "2023-10-02"
+    },
+    "waste": {
+      "value": 0.5,
+      "unit": "kg CO2e / kg",
+      "source": "US EPA WARM model",
+      "updatedDate": "2023-05-14"
+    },
+    "recycling": {
+      "value": -0.25,
+      "unit": "kg CO2e / kg",
+      "source": "Avoided Emissions (EPA)",
+      "updatedDate": "2023-05-14"
+    }
+  }
+}

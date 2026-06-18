@@ -1,0 +1,261 @@
+import { IActivityRepository } from '../../domain/repositories/IActivityRepository';
+import { IUserRepository } from '../../domain/repositories/IUserRepository';
+import { IGoalRepository } from '../../domain/repositories/IGoalRepository';
+import { EmissionCalculator } from '../../services/EmissionCalculator';
+import { Activity, ActivityCategory } from '../../domain/entities/Activity';
+
+/** Shape of the dashboard data returned to the API consumer. */
+export interface DashboardData {
+  sustainabilityScore: number;
+  emissions: {
+    today: number;
+    weekly: number;
+    monthly: number;
+    annualProjection: number;
+  };
+  averages: {
+    nationalDaily: number;
+    globalDaily: number;
+    sustainableDaily: number;
+  };
+  highestSource: {
+    category: ActivityCategory | 'None';
+    percentage: number;
+    emissions: number;
+  };
+  lowestSource: {
+    category: ActivityCategory | 'None';
+    emissions: number;
+  };
+  categoryBreakdown: {
+    category: ActivityCategory;
+    emissions: number;
+    percentage: number;
+  }[];
+  equivalents: {
+    treesNeeded: number;
+    carKm: number;
+    electricityHours: number;
+    phoneCharges: number;
+  };
+  trends: { date: string; emissions: number }[];
+  explanation: string;
+  userStats: {
+    username: string;
+    points: number;
+    level: string;
+    streak: number;
+  };
+  currentGoal: {
+    targetCo2: number;
+    achieved: boolean;
+    endDate: Date;
+  } | null;
+}
+
+/**
+ * Use case: Compile all Carbon Intelligence Dashboard data for a user.
+ *
+ * Fetches activities once (last 30 days) and computes all time-based aggregates
+ * in memory to minimize database round trips. Independent repository calls
+ * (trend data, category summaries, current goal) are parallelized via Promise.all.
+ */
+export class GetDashboardData {
+  constructor(
+    private activityRepository: IActivityRepository,
+    private userRepository: IUserRepository,
+    private goalRepository: IGoalRepository
+  ) {}
+
+  /**
+   * Execute the dashboard data compilation.
+   *
+   * @param userId - The ID of the user to compile data for.
+   * @returns Fully assembled DashboardData object.
+   * @throws Error if the user is not found.
+   */
+  async execute(userId: number): Promise<DashboardData> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) throw new Error('User not found.');
+
+    const now = new Date();
+
+    // Date boundaries
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startOfTrend = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+
+    // 1. Parallel fetch: one broad activity load + category summary + trend data + current goal
+    //    Activities are fetched for the last 30 days in a single query; sub-ranges are computed in memory.
+    const [monthlyResult, categorySummary, rawTrends, currentGoalData] = await Promise.all([
+      this.activityRepository.findByUserId(userId, { startDate: startOfMonth }),
+      this.activityRepository.getCategorySummary(userId, startOfMonth, now),
+      this.activityRepository.getDailyEmissionsSummary(userId, startOfTrend, now),
+      this.goalRepository.findCurrentGoal(userId),
+    ]);
+
+    const allActivities: Activity[] = monthlyResult.activities;
+
+    // 2. Compute time-based aggregates in memory (avoids 2 extra DB queries)
+    let todayEmissions = 0;
+    let weeklyEmissions = 0;
+    let monthlyEmissions = 0;
+
+    for (const a of allActivities) {
+      const t = new Date(a.timestamp);
+      monthlyEmissions += a.co2Emissions;
+      if (t >= startOfWeek) weeklyEmissions += a.co2Emissions;
+      if (t >= startOfToday) todayEmissions += a.co2Emissions;
+    }
+
+    // 3. Annual projection — proportional to actual tracked days (not always 30)
+    //    Use min(30, days since account creation) as the denominator so new users
+    //    don't get an inflated projection.
+    const trackedDays = Math.min(
+      30,
+      Math.max(1, Math.round((now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24)))
+    );
+    const dailyAverage = monthlyEmissions / trackedDays;
+    const annualProjection = dailyAverage * 365;
+
+    // 4. Category breakdown
+    const categories: ActivityCategory[] = ['transport', 'energy', 'food', 'shopping_waste'];
+    const breakdownMap: Record<ActivityCategory, number> = {
+      transport: 0, energy: 0, food: 0, shopping_waste: 0
+    };
+    categorySummary.forEach(c => {
+      breakdownMap[c.category] = c.totalEmissions;
+    });
+
+    const categoryBreakdown = categories.map(cat => {
+      const emissions = breakdownMap[cat];
+      const percentage = monthlyEmissions > 0 ? Math.round((emissions / monthlyEmissions) * 100) : 0;
+      return {
+        category: cat,
+        emissions: Math.round(emissions * 10) / 10,
+        percentage
+      };
+    });
+
+    // 5. Highest / lowest category sources (last 30 days)
+    let highestSourceCat: ActivityCategory | 'None' = 'None';
+    let highestSourceVal = -1;
+    let lowestSourceCat: ActivityCategory | 'None' = 'None';
+    let lowestSourceVal = Infinity;
+
+    categoryBreakdown.forEach(item => {
+      if (item.emissions > highestSourceVal && item.emissions > 0) {
+        highestSourceVal = item.emissions;
+        highestSourceCat = item.category;
+      }
+      if (item.emissions < lowestSourceVal && item.emissions > 0) {
+        lowestSourceVal = item.emissions;
+        lowestSourceCat = item.category;
+      }
+    });
+
+    if (highestSourceVal === -1) highestSourceVal = 0;
+    if (lowestSourceVal === Infinity) {
+      lowestSourceVal = 0;
+      lowestSourceCat = 'None';
+    }
+
+    const highestPct = monthlyEmissions > 0 ? Math.round((highestSourceVal / monthlyEmissions) * 100) : 0;
+
+    // 6. Dynamic sustainability score
+    //    Sustainable target is 5.5 kg/day. Score ∈ [10, 100].
+    let sustainabilityScore = 70; // baseline for users with no logs
+    if (monthlyEmissions > 0) {
+      const targetDaily = 5.5;
+      const averageDailyEmission = dailyAverage;
+      if (averageDailyEmission <= targetDaily) {
+        sustainabilityScore = Math.round(100 - (averageDailyEmission / targetDaily) * 10);
+      } else {
+        const scale = 15;
+        sustainabilityScore = Math.max(10, Math.round(90 - ((averageDailyEmission - targetDaily) / scale) * 80));
+      }
+    }
+
+    // 7. Real-world equivalents (using monthly emissions)
+    const treesNeeded = EmissionCalculator.getTreeEquivalent(monthlyEmissions);
+    const carKm = EmissionCalculator.getCarKmEquivalent(monthlyEmissions);
+    const electricityHours = EmissionCalculator.getElectricityHoursEquivalent(monthlyEmissions);
+    const phoneCharges = EmissionCalculator.getPhoneChargesEquivalent(monthlyEmissions);
+
+    // 8. Daily trend chart (last 15 days) — fill gaps with 0 for a smooth timeline
+    const trendMap = new Map<string, number>();
+    rawTrends.forEach(t => trendMap.set(t.date, t.totalEmissions));
+
+    const trends: { date: string; emissions: number }[] = [];
+    for (let i = 15; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateStr = d.toISOString().split('T')[0];
+      trends.push({
+        date: dateStr,
+        emissions: Math.round((trendMap.get(dateStr) || 0) * 10) / 10
+      });
+    }
+
+    // 9. Current goal
+    const currentGoal = currentGoalData ? {
+      targetCo2: currentGoalData.targetCo2,
+      achieved: currentGoalData.achieved,
+      endDate: currentGoalData.endDate
+    } : null;
+
+    // 10. Human-readable explanation
+    let explanation = "Great! You don't have any emissions recorded in the last month. Keep tracking your habits to evaluate your score.";
+    if (monthlyEmissions > 0) {
+      const sourceName = highestSourceCat.replace('_', ' ');
+      explanation = `${sourceName.charAt(0).toUpperCase() + sourceName.slice(1)} contributes ${highestPct}% of your emissions and is your largest emission source.`;
+      if (sustainabilityScore > 80) {
+        explanation += ' Your footprint is well within the sustainable target range. Superb work!';
+      } else if (sustainabilityScore > 50) {
+        explanation += ' Your footprint is close to the average. Look for quick reduction wins in transportation and energy.';
+      } else {
+        explanation += ' Your footprint is higher than the sustainable target. Swapping some car trips for public transit or walking can make a big impact.';
+      }
+    }
+
+    return {
+      sustainabilityScore,
+      emissions: {
+        today: Math.round(todayEmissions * 10) / 10,
+        weekly: Math.round(weeklyEmissions * 10) / 10,
+        monthly: Math.round(monthlyEmissions * 10) / 10,
+        annualProjection: Math.round(annualProjection * 10) / 10
+      },
+      averages: {
+        nationalDaily: 16.0, // US national average kg CO2e/day
+        globalDaily: 11.5,
+        sustainableDaily: 5.5
+      },
+      highestSource: {
+        category: highestSourceCat,
+        percentage: highestPct,
+        emissions: Math.round(highestSourceVal * 10) / 10
+      },
+      lowestSource: {
+        category: lowestSourceCat,
+        emissions: Math.round(lowestSourceVal * 10) / 10
+      },
+      categoryBreakdown,
+      equivalents: {
+        treesNeeded,
+        carKm,
+        electricityHours,
+        phoneCharges
+      },
+      trends,
+      explanation,
+      userStats: {
+        username: user.username,
+        points: user.points,
+        level: user.level,
+        streak: user.streak
+      },
+      currentGoal
+    };
+  }
+}
