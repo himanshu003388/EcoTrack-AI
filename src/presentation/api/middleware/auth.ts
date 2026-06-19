@@ -4,7 +4,7 @@ import crypto from 'crypto';
 
 export let sessionFallbackSecret: string | undefined;
 
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production' && process.env.AUTH_REQUIRED !== 'false') {
   if ((process.env.JWT_SECRET ?? '') === '') {
     throw new Error('JWT_SECRET must be set in production');
   }
@@ -45,7 +45,10 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
   const token = authHeader?.split(' ')[1];
 
   if (token === undefined || token === '') {
-    if (process.env.AUTH_REQUIRED === 'true' || process.env.NODE_ENV === 'production') {
+    if (
+      process.env.AUTH_REQUIRED === 'true' ||
+      (process.env.NODE_ENV === 'production' && process.env.AUTH_REQUIRED !== 'false')
+    ) {
       res.status(401).json({ error: 'Authentication required.' });
       return;
     }

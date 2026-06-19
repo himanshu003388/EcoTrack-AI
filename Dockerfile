@@ -1,5 +1,5 @@
 # Stage 1: Build client and server with native compilation support
-FROM node:20 AS builder
+FROM node:22 AS builder
 WORKDIR /app
 
 # Copy dependency files
@@ -16,10 +16,10 @@ COPY . .
 RUN npm run build
 
 # Prune devDependencies to leave only production packages in node_modules
-RUN npm prune --omit=dev && npm cache clean --force
+RUN npm prune --omit=dev --ignore-engines && npm cache clean --force
 
 # Stage 2: Production environment
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 
 # Create group and user first, so they are available for COPY --chown instructions
