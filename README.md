@@ -203,7 +203,7 @@ src/
 |------------|----------------|
 | **XSS Prevention** | `sanitize.ts` middleware strips `<script>`, `<style>`, inline event handlers, `javascript:` and `data:` URI protocols from all body/query/param strings |
 | **Input Size Caps** | Activity quantity ≤ 100,000; chat messages ≤ 500 chars; goal targets ≤ 10,000 kg/month — prevents payload abuse |
-| **NaN Guards** | All `parseInt()` calls on route params (activityId, challengeId) validated before use — prevents silent query corruption |
+| **NaN Guards** | All `parseInt()` calls on route and query params (activityId, challengeId, limit, offset) strictly checked via `Number.isNaN()` — prevents automatic type-coercion bypasses and query corruption |
 | **404 on Missing Resources** | DELETE `/api/activities/:id` returns 404 when no matching row exists, not 200 |
 | **Date Validation** | `startDate`/`endDate` query params validated as real ISO dates — returns 400 on invalid input |
 | **Body Limit** | `express.json({ limit: '100kb' })` prevents oversized payloads |
@@ -273,25 +273,28 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**300 tests across 15 suites (located in `src/tests/`). Coverage: 100% statements/functions/lines, 98.99% branches.**
+**301 tests across 15 suites (located in `src/tests/`). Coverage: 100% statements, 100% branches, 100% functions, 100% lines.**
+
+- **Execution-Order Independence:** All E2E integration tests are strictly isolated and order-independent using `beforeEach` database resets and local data seeding.
+- **Rate-Limit Bypassing:** Express rate limiters automatically skip checks in the test environment to prevent false-positives under test concurrency.
 
 | Suite | Tests | Type |
 |-------|-------|------|
-| `src/tests/EmissionCalculator.test.ts` | 12 | Unit — CO2e formulas, equivalents, edge cases (zero, decimal, unknown) |
+| `src/tests/EmissionCalculator.test.ts` | 15 | Unit — CO2e formulas, equivalents, edge cases (zero, decimal, unknown) |
 | `src/tests/SimpleActionService.test.ts` | 10 | Unit — daily action rotation, category targeting, edge cases |
-| `src/tests/AiCoachService.test.ts` | 8 | Unit — NLP coaching paths, weekly insights, zero-streak, fallback reply |
+| `src/tests/AiCoachService.test.ts` | 14 | Unit — NLP coaching paths, weekly insights, zero-streak, fallback reply |
 | `src/tests/schemas.test.ts` | 14 | Unit — Zod validation: valid/invalid inputs for activity, goal, coach schemas |
 | `src/tests/domain.test.ts` | 25 | Unit — Activity/User entities, `calculateLevel` with boundary tests at every threshold |
-| `src/tests/use-cases.test.ts` | 16 | Unit — LogActivity (future timestamp rejection, recurring activity), GetActivities |
-| `src/tests/middleware.test.ts` | 22 | Unit — Auth, XSS sanitizer (data: URI, nested objects, arrays), schema size caps |
+| `src/tests/use-cases.test.ts` | 37 | Unit — LogActivity (future timestamp rejection, recurring activity), GetActivities |
+| `src/tests/middleware.test.ts` | 27 | Unit — Auth, XSS sanitizer (data: URI, nested objects, arrays), schema size caps |
 | `src/tests/components.test.tsx` | 12 | Component — ErrorBoundary, Skeleton a11y |
 | `src/tests/Layout.test.tsx` | 11 | Component + a11y — nav landmarks, ARIA labels, axe scan |
 | `src/tests/pages-a11y.test.tsx` | 19 | a11y — jest-axe scans of all 7 pages (Dashboard, Tracker, Simulator, Forecast, Coach, Challenges, Reports) |
-| `src/tests/db-repositories.test.ts` | 27 | Unit — DatabaseConnection interface, schema SQL structure & indexes, all repo edge cases |
+| `src/tests/db-repositories.test.ts` | 48 | Unit — DatabaseConnection interface, schema SQL structure & indexes, all repo edge cases |
 | `src/tests/repository-interfaces.test.ts` | 4 | Contract — All 4 repository interface method signatures |
-| `src/tests/ForecastService.test.ts` | 3 | Unit — zero baseline, increasing trend, decreasing trend |
+| `src/tests/ForecastService.test.ts` | 5 | Unit — zero baseline, increasing trend, decreasing trend |
 | `src/tests/RecommendationEngine.test.ts` | 2 | Unit — relevance ranking, zero-category de-prioritization |
-| `src/tests/e2e.test.ts` | 59 | Integration — Full API surface: activities (CRUD, 404 on missing), dashboard, recommendations, forecast, coach, challenges, reports, actions, validation errors, valid date filters, startup logging |
+| `src/tests/e2e.test.ts` | 58 | Integration — Full API surface: activities (CRUD, 404 on missing), dashboard, recommendations, forecast, coach, challenges, reports, actions, validation errors, valid date filters, startup logging |
 
 ---
 
