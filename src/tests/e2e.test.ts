@@ -6,7 +6,7 @@ import { ActivityRepository } from '../infrastructure/database/ActivityRepositor
 import { GoalRepository } from '../infrastructure/database/GoalRepository';
 
 describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
-  let loggedActivityId = 0;
+
 
   beforeAll(async () => {
     await db.initializeSchema();
@@ -55,7 +55,6 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
     expect(res.status).toBe(201);
     expect(res.body.activity.co2Emissions).toBe(18.0);
     expect(res.body.activity.category).toBe('transport');
-    loggedActivityId = res.body.activity.id;
   });
 
   // 3. Log Activity - Validation
