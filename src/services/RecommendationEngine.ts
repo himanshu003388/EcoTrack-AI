@@ -6,24 +6,26 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
   {
     id: 'rec_replace_car_trips_bike',
     title: 'Replace short car trips with cycling',
-    description: 'Replace at least two weekly car trips under 5km with cycling or walking. Great for health and emissions.',
+    description:
+      'Replace at least two weekly car trips under 5km with cycling or walking. Great for health and emissions.',
     category: 'transport',
     co2Reduction: 8.5, // kg CO2e saved per week
     costSavings: 12.0, // USD saved per week
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 6
+    impactScore: 6,
   },
   {
     id: 'rec_regional_train',
     title: 'Take regional trains instead of short flights',
-    description: 'For travel under 500km, opt for high-speed or passenger rail. It reduces transit emissions by over 70%.',
+    description:
+      'For travel under 500km, opt for high-speed or passenger rail. It reduces transit emissions by over 70%.',
     category: 'transport',
     co2Reduction: 120.0,
     costSavings: 45.0,
     difficulty: 'medium',
     timeRequired: 'short-term',
-    impactScore: 9
+    impactScore: 9,
   },
   {
     id: 'rec_carpool_commute',
@@ -34,7 +36,7 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 20.0,
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 5
+    impactScore: 5,
   },
   {
     id: 'rec_ev_transition',
@@ -45,7 +47,7 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 50.0,
     difficulty: 'hard',
     timeRequired: 'long-term',
-    impactScore: 10
+    impactScore: 10,
   },
   {
     id: 'rec_led_lighting',
@@ -56,18 +58,19 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 8.0,
     difficulty: 'easy',
     timeRequired: 'short-term',
-    impactScore: 4
+    impactScore: 4,
   },
   {
     id: 'rec_thermostat_adjust',
     title: 'Adjust thermostat by 2°C',
-    description: 'Set your heater 2 degrees cooler in winter or AC 2 degrees warmer in summer. Reduces load significantly.',
+    description:
+      'Set your heater 2 degrees cooler in winter or AC 2 degrees warmer in summer. Reduces load significantly.',
     category: 'energy',
     co2Reduction: 12.0,
     costSavings: 18.0,
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 6
+    impactScore: 6,
   },
   {
     id: 'rec_solar_installation',
@@ -78,18 +81,19 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 40.0,
     difficulty: 'hard',
     timeRequired: 'long-term',
-    impactScore: 10
+    impactScore: 10,
   },
   {
     id: 'rec_line_dry_clothes',
     title: 'Hang-dry clothes instead of using dryer',
-    description: 'Take advantage of natural breeze and sun. The tumble dryer is one of the most energy-intensive home appliances.',
+    description:
+      'Take advantage of natural breeze and sun. The tumble dryer is one of the most energy-intensive home appliances.',
     category: 'energy',
     co2Reduction: 4.5,
     costSavings: 6.0,
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 3
+    impactScore: 3,
   },
   {
     id: 'rec_meat_free_day',
@@ -100,7 +104,7 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 15.0,
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 5
+    impactScore: 5,
   },
   {
     id: 'rec_vegan_diet',
@@ -111,18 +115,19 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 50.0,
     difficulty: 'hard',
     timeRequired: 'short-term',
-    impactScore: 9
+    impactScore: 9,
   },
   {
     id: 'rec_dairy_reduction',
     title: 'Eliminate dairy 3 days a week',
-    description: 'Swap cheese and cow milk for oat, almond, or soy alternatives. Dairy has substantial land-use impact.',
+    description:
+      'Swap cheese and cow milk for oat, almond, or soy alternatives. Dairy has substantial land-use impact.',
     category: 'food',
     co2Reduction: 7.2,
     costSavings: 10.0,
     difficulty: 'medium',
     timeRequired: 'immediate',
-    impactScore: 6
+    impactScore: 6,
   },
   {
     id: 'rec_composting_waste',
@@ -133,7 +138,7 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 2.0,
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 3
+    impactScore: 3,
   },
   {
     id: 'rec_decline_single_use_plastics',
@@ -144,30 +149,32 @@ const RECOMMENDATION_CATALOG: Omit<Recommendation, 'relevanceScore'>[] = [
     costSavings: 1.0,
     difficulty: 'easy',
     timeRequired: 'immediate',
-    impactScore: 2
+    impactScore: 2,
   },
   {
     id: 'rec_consolidate_shipments',
     title: 'Consolidate online deliveries',
-    description: 'Wait and order items together in a single shipment rather than multiple separate packages. Reduces logistics emissions.',
+    description:
+      'Wait and order items together in a single shipment rather than multiple separate packages. Reduces logistics emissions.',
     category: 'shopping_waste',
     co2Reduction: 4.2,
     costSavings: 5.0,
     difficulty: 'easy',
     timeRequired: 'short-term',
-    impactScore: 4
+    impactScore: 4,
   },
   {
     id: 'rec_thrift_shopping',
     title: 'Buy clothing second-hand',
-    description: 'Opt for vintage, thrift stores, or clothing swaps. The textile industry is highly resource-intensive.',
+    description:
+      'Opt for vintage, thrift stores, or clothing swaps. The textile industry is highly resource-intensive.',
     category: 'shopping_waste',
     co2Reduction: 10.0,
     costSavings: 30.0,
     difficulty: 'medium',
     timeRequired: 'short-term',
-    impactScore: 5
-  }
+    impactScore: 5,
+  },
 ];
 
 /**
@@ -195,13 +202,12 @@ export class RecommendationEngine {
       transport: 0,
       energy: 0,
       food: 0,
-      shopping_waste: 0
+      shopping_waste: 0,
     };
 
     const thirtyDaysAgoTime = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-    for (let i = 0; i < userActivities.length; i++) {
-      const act = userActivities[i];
+    for (const act of userActivities) {
       if (act.timestamp.getTime() >= thirtyDaysAgoTime) {
         categoryTotals[act.category] += act.co2Emissions;
       }
@@ -211,10 +217,10 @@ export class RecommendationEngine {
     let highestCategory: ActivityCategory = 'transport';
     let highestVal = -1;
     const cats: ActivityCategory[] = ['transport', 'energy', 'food', 'shopping_waste'];
-    for (let i = 0; i < cats.length; i++) {
-      const cat = cats[i];
-      if (categoryTotals[cat] > highestVal) {
-        highestVal = categoryTotals[cat];
+    for (const cat of cats) {
+      const total = categoryTotals[cat];
+      if (total > highestVal) {
+        highestVal = total;
         highestCategory = cat;
       }
     }
@@ -222,7 +228,7 @@ export class RecommendationEngine {
     // Feasibility weights
     const FEASIBILITY: Record<'easy' | 'medium' | 'hard', number> = { easy: 3.0, medium: 2.0, hard: 1.0 };
 
-    return RECOMMENDATION_CATALOG.map(rec => {
+    return RECOMMENDATION_CATALOG.map((rec) => {
       const feasibility = FEASIBILITY[rec.difficulty];
 
       let preferenceModifier = 1.0;
@@ -235,7 +241,6 @@ export class RecommendationEngine {
       const relevanceScore = Math.round(rec.impactScore * feasibility * preferenceModifier * 10) / 10;
 
       return { ...rec, relevanceScore };
-    })
-    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+    }).sort((a, b) => b.relevanceScore - a.relevanceScore);
   }
 }

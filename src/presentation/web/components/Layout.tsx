@@ -1,6 +1,7 @@
 import React, { useState, memo, useEffect, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth, useTheme } from '../main';
+import { useFocusMainOnNav } from './Hooks';
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -15,7 +16,7 @@ import {
   Leaf,
   Sparkles,
   Moon,
-  Sun
+  Sun,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -34,11 +35,16 @@ const navItems = [
 
 function getLevelColor(level: string): string {
   switch (level) {
-    case 'Climate Hero': return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700';
-    case 'Forest Guardian': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700';
-    case 'Tree': return 'bg-forest-100 text-forest-700 border-forest-200 dark:bg-forest-800/40 dark:text-forest-300 dark:border-forest-700';
-    case 'Sapling': return 'bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700';
-    default: return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700';
+    case 'Climate Hero':
+      return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700';
+    case 'Forest Guardian':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700';
+    case 'Tree':
+      return 'bg-forest-100 text-forest-700 border-forest-200 dark:bg-forest-800/40 dark:text-forest-300 dark:border-forest-700';
+    case 'Sapling':
+      return 'bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700';
+    default:
+      return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700';
   }
 }
 
@@ -81,13 +87,18 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }): React.Reac
       {user && (
         <div className="p-3 border-t border-slate-100 dark:border-forest-800 shrink-0">
           <div className="flex items-center gap-2.5 p-2.5 bg-slate-50 dark:bg-forest-900/60 rounded-2xl border border-slate-100 dark:border-forest-800">
-            <div className="flex items-center justify-center h-9 w-9 rounded-full bg-forest-500 text-white font-bold font-display text-sm shrink-0" aria-hidden="true">
+            <div
+              className="flex items-center justify-center h-9 w-9 rounded-full bg-forest-500 text-white font-bold font-display text-sm shrink-0"
+              aria-hidden="true"
+            >
               {user.username.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{user.username}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`text-[10px] px-1.5 py-0.5 border rounded-full font-bold ${getLevelColor(user.level)}`}>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 border rounded-full font-bold ${getLevelColor(user.level)}`}
+                >
                   {user.level}
                 </span>
               </div>
@@ -105,11 +116,71 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const drawerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const touchStartX = useRef(0);
+
+  useFocusMainOnNav();
 
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Focus trap and focus management for mobile drawer
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      // Restore focus to the trigger button when the drawer closes
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
+      return;
+    }
+
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+
+    // Focus the first focusable element inside the drawer
+    const focusableElements = drawer.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    const firstFocusable = focusableElements[0];
+    if (firstFocusable) {
+      // Short delay to allow animation to start and avoid focus theft
+      setTimeout(() => {
+        firstFocusable.focus();
+      }, 50);
+    }
+
+    const handleFocusTrap = (e: KeyboardEvent): void => {
+      if (e.key !== 'Tab') return;
+
+      const focusables = drawer.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+
+      const firstElement = focusables[0];
+      const lastElement = focusables[focusables.length - 1];
+
+      if (firstElement && lastElement) {
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            lastElement.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            firstElement.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleFocusTrap);
+    return (): void => {
+      document.removeEventListener('keydown', handleFocusTrap);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -127,48 +198,63 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
     } else {
       document.body.style.overflow = '';
     }
-    return (): void => { document.body.style.overflow = ''; };
+    return (): void => {
+      document.body.style.overflow = '';
+    };
   }, [mobileMenuOpen]);
 
   const handleTouchStart = (e: React.TouchEvent): void => {
-    touchStartX.current = e.touches[0].clientX;
+    const touch = e.touches[0];
+    if (touch) {
+      touchStartX.current = touch.clientX;
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent): void => {
     if (touchStartX.current > 100) return;
-    const diff = e.touches[0].clientX - touchStartX.current;
-    if (diff > 80 && !mobileMenuOpen) {
-      setMobileMenuOpen(true);
+    const touch = e.touches[0];
+    if (touch) {
+      const diff = touch.clientX - touchStartX.current;
+      if (diff > 80 && !mobileMenuOpen) {
+        setMobileMenuOpen(true);
+      }
     }
   };
 
   const handleDrawerTouchEnd = (e: React.TouchEvent): void => {
-    const diff = e.changedTouches[0].clientX - touchStartX.current;
-    if (diff < -80) {
-      setMobileMenuOpen(false);
+    const touch = e.changedTouches[0];
+    if (touch) {
+      const diff = touch.clientX - touchStartX.current;
+      if (diff < -80) {
+        setMobileMenuOpen(false);
+      }
     }
   };
 
   return (
     <>
-      <a href="#main-content" className="skip-link">Skip to main content</a>
+      <a href="#main-content" className="skip-link" aria-label="Skip to main content and continue using keyboard">
+        Skip to main content
+      </a>
       <div
         className="flex h-screen overflow-hidden bg-slate-50 dark:bg-forest-950 font-sans transition-colors duration-200"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
       >
-        {/* Desktop sidebar — navigation landmark is on the inner <nav>, not this container */}
         <div className="hidden md:flex md:w-60 md:flex-col bg-white dark:bg-forest-900 border-r border-slate-100 dark:border-forest-800 shrink-0 transition-colors duration-200">
           <SidebarContent />
         </div>
 
-        {/* Main area */}
         <div className="flex flex-col flex-1 w-0 overflow-hidden">
-          <header className="flex items-center justify-between h-16 px-4 bg-white/80 dark:bg-forest-900/80 backdrop-blur-md border-b border-slate-100 dark:border-forest-800 md:px-8 sticky top-0 z-30 transition-colors duration-200" role="banner">
+          <header
+            className="flex items-center justify-between h-16 px-4 bg-white/80 dark:bg-forest-900/80 backdrop-blur-md border-b border-slate-100 dark:border-forest-800 md:px-8 sticky top-0 z-30 transition-colors duration-200"
+            role="banner"
+          >
             <div className="flex items-center gap-2">
               <button
+                ref={triggerRef}
                 onClick={() => setMobileMenuOpen(true)}
-                className="btn-press p-2 -ml-2 rounded-lg md:hidden text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-forest-800 hover:text-slate-700 dark:hover:text-slate-200"
+                className="btn-press p-2.5 -ml-2 rounded-lg md:hidden text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-forest-800 hover:text-slate-700 dark:hover:text-slate-200"
                 aria-label="Open navigation menu"
                 aria-expanded={mobileMenuOpen}
                 aria-controls="mobile-menu"
@@ -178,15 +264,20 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
               <div className="flex items-center gap-1.5 md:hidden" aria-hidden="true">
                 <Leaf className="h-5 w-5 text-forest-500" />
               </div>
+              <div aria-live="polite" aria-atomic="true" className="sr-only" id="nav-announcement"></div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleTheme}
-                className="btn-press p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-forest-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                className="btn-press p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-forest-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                 aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                {theme === 'dark' ? <Sun className="h-5 w-5" aria-hidden="true" /> : <Moon className="h-5 w-5" aria-hidden="true" />}
+                {theme === 'dark' ? (
+                  <Sun className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <Moon className="h-5 w-5" aria-hidden="true" />
+                )}
               </button>
 
               {user && (
@@ -219,6 +310,7 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
             </div>
           </header>
 
+          <div aria-live="polite" aria-atomic="true" className="sr-only" id="a11y-announcements"></div>
           <main
             id="main-content"
             className="flex-1 relative overflow-y-auto focus:outline-none p-4 md:p-8 animate-fade-in"
@@ -229,9 +321,17 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
           </main>
         </div>
 
-        {/* Mobile drawer */}
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-40 md:hidden animate-fade-in" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+          <div
+            className="fixed inset-0 z-40 md:hidden animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile navigation"
+            aria-describedby="mobile-menu-desc"
+          >
+            <span id="mobile-menu-desc" className="sr-only">
+              Use tab to navigate menu items. Press Escape to close.
+            </span>
             <div
               className="fixed inset-0 bg-slate-600/30 dark:bg-black/50 backdrop-blur-sm"
               onClick={() => setMobileMenuOpen(false)}
@@ -248,11 +348,13 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-forest-500 glow-logo-container">
                     <Leaf className="h-4 w-4 text-white" aria-hidden="true" />
                   </div>
-                  <span className="font-display text-lg font-bold tracking-tight text-forest-500 glow-green">EcoTrack</span>
+                  <span className="font-display text-lg font-bold tracking-tight text-forest-500 glow-green">
+                    EcoTrack
+                  </span>
                 </div>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className="btn-press p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-forest-800 hover:text-slate-600 dark:hover:text-slate-300"
+                  className="btn-press p-2.5 rounded-lg text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-forest-800 hover:text-slate-600 dark:hover:text-slate-300"
                   aria-label="Close navigation menu"
                 >
                   <X className="h-5 w-5" aria-hidden="true" />

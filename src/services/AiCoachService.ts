@@ -25,14 +25,13 @@ export class AiCoachService {
       transport: 0,
       energy: 0,
       food: 0,
-      shopping_waste: 0
+      shopping_waste: 0,
     };
 
     let highestCategory: ActivityCategory = 'transport';
     let highestVal = -1;
 
-    for (let i = 0; i < activities.length; i++) {
-      const act = activities[i];
+    for (const act of activities) {
       const emissions = act.co2Emissions;
       totalEmissions += emissions;
 
@@ -46,7 +45,6 @@ export class AiCoachService {
     }
 
     const highestPct = totalEmissions > 0 ? Math.round((highestVal / totalEmissions) * 100) : 0;
-
 
     // 2. Draft dynamic replies based on user keywords
     let reply = '';
@@ -62,25 +60,47 @@ export class AiCoachService {
     // Greeting / Intro
     else if (text.includes('hello') || text.includes('hi ') || text.includes('hey') || text.includes('coach')) {
       reply = `Hello, ${user.username}! I am your Eco Coach, here to support your journey. You are currently at the **${user.level}** level with **${user.points} points** and a **${user.streak}-day log streak**! 🌟\n\nHow can I help you understand or reduce your carbon footprint today? You can ask me about transport, diet, home energy, or check out your latest insights.`;
-      insights.push(`Your current daily tracking streak is ${user.streak} days. Consistent tracking is key to building carbon awareness!`);
-      suggestions.push('How can I reduce my transport emissions?', 'What are my highest footprint categories?', 'Tell me a tip about plant-based food.');
+      insights.push(
+        `Your current daily tracking streak is ${user.streak} days. Consistent tracking is key to building carbon awareness!`,
+      );
+      suggestions.push(
+        'How can I reduce my transport emissions?',
+        'What are my highest footprint categories?',
+        'Tell me a tip about plant-based food.',
+      );
     }
     // Transport (Regex to check word boundaries, avoiding substring conflicts like car/carbon)
-    else if (/\b(transport|transportation|car|cars|drive|driving|flight|flights|fly|flying|bike|bikes|cycling|train|trains|bus|buses|commute)\b/.test(text)) {
+    else if (
+      /\b(transport|transportation|car|cars|drive|driving|flight|flights|fly|flying|bike|bikes|cycling|train|trains|bus|buses|commute)\b/.test(
+        text,
+      )
+    ) {
       reply = `Transport is often one of the largest parts of an individual's carbon footprint. For you, transport accounts for **${Math.round(categoryTotals.transport)} kg CO2e** of your logs. 🚗\n\n**Actionable Tips:**\n- **Walk or Bike**: For trips under 5km, walking or biking emits exactly 0 kg of carbon!\n- **Public Transit**: Taking a train emits 0.04 kg CO2e/km, compared to 0.18 kg CO2e/km for a petrol car. That's a 77% reduction!\n- **Carpooling**: Even sharing a ride with one colleague cuts your transit emissions in half.`;
-      insights.push(`Transport represents ${totalEmissions > 0 ? Math.round((categoryTotals.transport / totalEmissions) * 100) : 0}% of your recorded carbon footprint.`);
+      insights.push(
+        `Transport represents ${totalEmissions > 0 ? Math.round((categoryTotals.transport / totalEmissions) * 100) : 0}% of your recorded carbon footprint.`,
+      );
       suggestions.push('Tell me about food emissions', 'How does the carbon simulator work?', 'Give me a challenge');
     }
     // Food / Diet
-    else if (/\b(food|diet|eat|eating|meal|meals|meat|beef|chicken|pork|dairy|milk|cheese|vegetarian|vegan)\b/.test(text)) {
+    else if (
+      /\b(food|diet|eat|eating|meal|meals|meat|beef|chicken|pork|dairy|milk|cheese|vegetarian|vegan)\b/.test(text)
+    ) {
       reply = `What we eat has a huge impact on land use and methane emissions. In your logs, food accounts for **${Math.round(categoryTotals.food)} kg CO2e**. 🥗\n\n**Simple Changes:**\n- **Reduce Meat**: Swapping a single beef meal for a vegetarian option saves about 4.6 kg CO2e (that's equivalent to driving a car 20 kilometers!).\n- **Try Dairy Alternatives**: swap out cow milk for oat milk (oat milk has a footprint 70% lower than dairy milk).\n- **Zero Food Waste**: Planning meals prevents unused food rotting in landfills, which releases harmful methane.`;
-      insights.push(`Food accounts for ${totalEmissions > 0 ? Math.round((categoryTotals.food / totalEmissions) * 100) : 0}% of your logs.`);
+      insights.push(
+        `Food accounts for ${totalEmissions > 0 ? Math.round((categoryTotals.food / totalEmissions) * 100) : 0}% of your logs.`,
+      );
       suggestions.push('What challenges can I join?', 'Explain carbon offsets', 'How can I lower my energy bill?');
     }
     // Home Energy
-    else if (/\b(energy|electricity|power|gas|lpg|heating|cooling|heater|ac|solar|bulb|bulbs|light|lights|led|thermostat)\b/.test(text)) {
+    else if (
+      /\b(energy|electricity|power|gas|lpg|heating|cooling|heater|ac|solar|bulb|bulbs|light|lights|led|thermostat)\b/.test(
+        text,
+      )
+    ) {
       reply = `Home heating, cooling, and electricity use are major points of carbon emissions. For you, energy accounts for **${Math.round(categoryTotals.energy)} kg CO2e** of your footprint. 💡\n\n**Energy Efficiency Wins:**\n- **The 2°C Rule**: Adjusting your thermostat settings (turning down your heater by 2°C in winter or up by 2°C in summer) can cut heating/cooling carbon output by 15%.\n- **Phantom Load**: Electronics consume energy even when turned off but plugged in. Use smart power strips to unplug TV and computer setups at night.\n- **LED Upgrades**: Switching standard bulbs to LED uses 80% less energy and saves money on your utility bills.`;
-      insights.push(`Home energy accounts for ${totalEmissions > 0 ? Math.round((categoryTotals.energy / totalEmissions) * 100) : 0}% of your logged footprint.`);
+      insights.push(
+        `Home energy accounts for ${totalEmissions > 0 ? Math.round((categoryTotals.energy / totalEmissions) * 100) : 0}% of your logged footprint.`,
+      );
       suggestions.push('How do I earn points?', 'What is my carbon forecast?', 'Give me a transport tip');
     }
     // Stats / Analysis
@@ -89,10 +109,16 @@ export class AiCoachService {
         reply = `You haven't logged any activities yet! Swap over to the **Tracker** page to log your first car ride, meal, or electric bill, and I will analyze it here.`;
       } else {
         reply = `I have analyzed your footprint! Your total logged emissions are **${Math.round(totalEmissions)} kg CO2e**. Your largest source of emissions is **${highestCategory.replace('_', ' ')}**, representing **${highestPct}%** of your total footprint. 📊\n\nYour current Sustainability Score is calculated by evaluating how close you are to the sustainable daily ceiling of **5.5 kg CO2e**. Let's work together to complete challenges and reduce your footprint!`;
-        insights.push(`Your highest emission source is ${highestCategory} (${Math.round(categoryTotals[highestCategory])} kg).`);
+        insights.push(
+          `Your highest emission source is ${highestCategory} (${Math.round(categoryTotals[highestCategory])} kg).`,
+        );
         insights.push(`You have earned ${user.points} XP points, advancing you to a ${user.level} status.`);
       }
-      suggestions.push('How to reduce transport emissions?', 'Give me an energy saving challenge', 'What is the Climate Hero level?');
+      suggestions.push(
+        'How to reduce transport emissions?',
+        'Give me an energy saving challenge',
+        'What is the Climate Hero level?',
+      );
     }
     // Challenges / Gamification
     else if (/\b(challenge|challenges|point|points|xp|level|badge|badges|achievement|achievements)\b/.test(text)) {
@@ -110,7 +136,7 @@ export class AiCoachService {
     return {
       reply,
       insights,
-      suggestions
+      suggestions,
     };
   }
 
@@ -124,13 +150,14 @@ export class AiCoachService {
   static getWeeklyInsights(user: User, activities: Activity[]): string[] {
     const insights: string[] = [];
     if (activities.length === 0) {
-      return ['Welcome! Start logging your transportation, food, shopping, and home energy to unlock personalized insights.'];
+      return [
+        'Welcome! Start logging your transportation, food, shopping, and home energy to unlock personalized insights.',
+      ];
     }
 
     let transportEmissions = 0;
     let foodEmissions = 0;
-    for (let i = 0; i < activities.length; i++) {
-      const a = activities[i];
+    for (const a of activities) {
       if (a.category === 'transport') {
         transportEmissions += a.co2Emissions;
       } else if (a.category === 'food') {
@@ -139,19 +166,27 @@ export class AiCoachService {
     }
 
     if (transportEmissions > foodEmissions && transportEmissions > 15) {
-      insights.push('Your transportation emissions are a key area. Replacing short drives with cycling could save up to 8.5 kg CO2e per trip!');
+      insights.push(
+        'Your transportation emissions are a key area. Replacing short drives with cycling could save up to 8.5 kg CO2e per trip!',
+      );
     }
     if (foodEmissions > 20) {
-      insights.push('Food emissions are relatively high this week. Having a Meat-Free Monday could reduce your diet footprint by 15%.');
+      insights.push(
+        'Food emissions are relatively high this week. Having a Meat-Free Monday could reduce your diet footprint by 15%.',
+      );
     }
     if (user.streak >= 3) {
-      insights.push(`Fantastic! You've maintained a ${user.streak}-day log streak. Consistency leads to sustainable habits.`);
+      insights.push(
+        `Fantastic! You've maintained a ${user.streak}-day log streak. Consistency leads to sustainable habits.`,
+      );
     } else {
       insights.push('Try logging daily to build habit awareness and see accurate forecasts of your footprint.');
     }
 
     // Add general positive encouragement
-    insights.push('Every small effort counts. Reducing your thermostat by just 1°C saves up to 8% of heating/cooling emissions.');
+    insights.push(
+      'Every small effort counts. Reducing your thermostat by just 1°C saves up to 8% of heating/cooling emissions.',
+    );
     return insights;
   }
 }

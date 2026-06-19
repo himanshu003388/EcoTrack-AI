@@ -48,17 +48,20 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const counterRef = useRef(0);
 
   const removeToast = useCallback((id: number) => {
-    setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)));
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
+      setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 250);
   }, []);
 
-  const toast = useCallback((type: ToastType, message: string) => {
-    const id = ++counterRef.current;
-    setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => removeToast(id), 4000);
-  }, [removeToast]);
+  const toast = useCallback(
+    (type: ToastType, message: string) => {
+      const id = ++counterRef.current;
+      setToasts((prev) => [...prev, { id, type, message }]);
+      setTimeout(() => removeToast(id), 4000);
+    },
+    [removeToast],
+  );
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -69,10 +72,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         role="region"
         aria-label="Notifications"
       >
-        {toasts.map(t => (
+        {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border shadow-lg shadow-slate-200/50 dark:shadow-black/20 ${bgColors[t.type]} ${borders[t.type]} ${t.exiting ? 'animate-toast-out' : 'animate-toast-in'}`}
+            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border shadow-lg shadow-slate-200/50 dark:shadow-black/20 ${bgColors[t.type]} ${borders[t.type]} ${t.exiting === true ? 'animate-toast-out' : 'animate-toast-in'}`}
             role="alert"
           >
             {icons[t.type]}

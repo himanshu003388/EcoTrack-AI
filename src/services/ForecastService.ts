@@ -24,6 +24,21 @@ export interface ForecastReport {
  * computes a trend, and projects next month's emissions. Risk areas and improvement
  * opportunities are derived in a single pass over the category data for efficiency.
  */
+const DEFAULT_MONTHLY_ESTIMATE_KG = 480;
+const DAYS_IN_WINDOW = 15;
+const DAYS_IN_MONTH = 30;
+const SCALE_FACTOR_15_TO_30 = 2;
+const TREND_THRESHOLD_PCT = 5;
+const GOAL_HIGH_PROBABILITY = 70;
+const GOAL_LOW_PROBABILITY = 50;
+const GOAL_BUFFER_WEIGHT = 30;
+const GOAL_EXCESS_WEIGHT = 50;
+const RISK_INCREASE_THRESHOLD_PCT = 10;
+const NEW_EMISSION_THRESHOLD_KG = 20;
+const TRANSPORT_PROPORTION_THRESHOLD = 0.4;
+const FOOD_PROPORTION_THRESHOLD = 0.3;
+const ENERGY_PROPORTION_THRESHOLD = 0.3;
+
 export class ForecastService {
   /**
    * Generate a forecast report from historical activity data.
@@ -33,8 +48,7 @@ export class ForecastService {
    * @returns A ForecastReport with trend analysis and personalized improvement suggestions.
    */
   static generate(userActivities: Activity[], currentGoal: Goal | null): ForecastReport {
-    /** Baseline estimate when no data: ~480 kg/month (≈ 16 kg/day national avg). */
-    const defaultEstimate = 480;
+    const defaultEstimate = DEFAULT_MONTHLY_ESTIMATE_KG;
 
     if (userActivities.length === 0) {
       return {
@@ -43,32 +57,37 @@ export class ForecastService {
         trendPercentage: 0,
         goalAchievementProbability: currentGoal ? 50 : 0,
         riskAreas: [],
-        improvementOpportunities: ['Log your first activity to start generating personalized forecasts!']
+        improvementOpportunities: ['Log your first activity to start generating personalized forecasts!'],
       };
     }
 
     // Time boundaries
     const now = new Date();
-    const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const fifteenDaysAgo = new Date(now.getTime() - DAYS_IN_WINDOW * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - DAYS_IN_MONTH * 24 * 60 * 60 * 1000);
 
     // Aggregate emissions in a SINGLE PASS over the activities array
     let recentEmissions = 0;
     let priorEmissions = 0;
 
     const recentCategoryEmissions: Record<ActivityCategory, number> = {
-      transport: 0, energy: 0, food: 0, shopping_waste: 0
+      transport: 0,
+      energy: 0,
+      food: 0,
+      shopping_waste: 0,
     };
     const priorCategoryEmissions: Record<ActivityCategory, number> = {
-      transport: 0, energy: 0, food: 0, shopping_waste: 0
+      transport: 0,
+      energy: 0,
+      food: 0,
+      shopping_waste: 0,
     };
 
     const fifteenDaysAgoTime = fifteenDaysAgo.getTime();
     const thirtyDaysAgoTime = thirtyDaysAgo.getTime();
     const nowTime = now.getTime();
 
-    for (let i = 0; i < userActivities.length; i++) {
-      const act = userActivities[i];
+    for (const act of userActivities) {
       const actTime = act.timestamp.getTime();
       if (actTime >= fifteenDaysAgoTime && actTime <= nowTime) {
         recentEmissions += act.co2Emissions;
@@ -80,7 +99,7 @@ export class ForecastService {
     }
 
     // Scale 15-day recent window to 30 days for a full-month projection
-    const recent30DayScaled = recentEmissions * 2;
+    const recent30DayScaled = recentEmissions * SCALE_FACTOR_15_TO_30;
     let nextMonthEstimate = recent30DayScaled === 0 ? defaultEstimate : recent30DayScaled;
 
     // Calculate trend percentage and direction
@@ -89,9 +108,9 @@ export class ForecastService {
 
     if (priorEmissions > 0) {
       trendPercentage = Math.round(((recentEmissions - priorEmissions) / priorEmissions) * 100 * 10) / 10;
-      if (trendPercentage > 5) {
+      if (trendPercentage > TREND_THRESHOLD_PCT) {
         trendDirection = 'increasing';
-      } else if (trendPercentage < -5) {
+      } else if (trendPercentage < -TREND_THRESHOLD_PCT) {
         trendDirection = 'decreasing';
       }
     }
@@ -106,10 +125,16 @@ export class ForecastService {
       const target = currentGoal.targetCo2;
       if (nextMonthEstimate <= target) {
         const buffer = target - nextMonthEstimate;
-        goalAchievementProbability = Math.min(100, Math.round(70 + (buffer / target) * 30));
+        goalAchievementProbability = Math.min(
+          100,
+          Math.round(GOAL_HIGH_PROBABILITY + (buffer / target) * GOAL_BUFFER_WEIGHT),
+        );
       } else {
         const excess = nextMonthEstimate - target;
-        goalAchievementProbability = Math.max(0, Math.round(50 - (excess / target) * 50));
+        goalAchievementProbability = Math.max(
+          0,
+          Math.round(GOAL_LOW_PROBABILITY - (excess / target) * GOAL_EXCESS_WEIGHT),
+        );
       }
     }
 
@@ -117,47 +142,59 @@ export class ForecastService {
     const riskAreas: ForecastReport['riskAreas'] = [];
     const improvementOpportunities: string[] = [];
 
-    (Object.keys(recentCategoryEmissions) as ActivityCategory[]).forEach(cat => {
+    (Object.keys(recentCategoryEmissions) as ActivityCategory[]).forEach((cat) => {
       const recent = recentCategoryEmissions[cat];
       const prior = priorCategoryEmissions[cat];
 
       // Risk area detection
       if (recent > 0 && prior > 0) {
         const increasePct = ((recent - prior) / prior) * 100;
-        if (increasePct > 10) {
+        if (increasePct > RISK_INCREASE_THRESHOLD_PCT) {
           riskAreas.push({
             category: cat,
             percentageIncrease: Math.round(increasePct),
-            message: `Emissions from ${cat} increased by ${Math.round(increasePct)}% compared to the previous fortnight.`
+            message: `Emissions from ${cat} increased by ${Math.round(increasePct)}% compared to the previous fortnight.`,
           });
         }
-      } else if (recent > 20 && prior === 0) {
+      } else if (recent > NEW_EMISSION_THRESHOLD_KG && prior === 0) {
         riskAreas.push({
           category: cat,
           percentageIncrease: 100,
-          message: `New emission activity detected in ${cat} this week.`
+          message: `New emission activity detected in ${cat} this week.`,
         });
       }
 
       // Category-specific improvement opportunities
-      if (cat === 'transport' && recent * 2 > recent30DayScaled * 0.4) {
-        improvementOpportunities.push('Transport accounts for a high proportion of your footprint. Try combining errands or carpooling.');
+      if (cat === 'transport' && recent * SCALE_FACTOR_15_TO_30 > recent30DayScaled * TRANSPORT_PROPORTION_THRESHOLD) {
+        improvementOpportunities.push(
+          'Transport accounts for a high proportion of your footprint. Try combining errands or carpooling.',
+        );
       }
-      if (cat === 'food' && recent * 2 > recent30DayScaled * 0.3) {
-        improvementOpportunities.push('Food emissions are above target. Incorporating more plant-based days is the fastest way to drop this.');
+      if (cat === 'food' && recent * SCALE_FACTOR_15_TO_30 > recent30DayScaled * FOOD_PROPORTION_THRESHOLD) {
+        improvementOpportunities.push(
+          'Food emissions are above target. Incorporating more plant-based days is the fastest way to drop this.',
+        );
       }
-      if (cat === 'energy' && recent * 2 > recent30DayScaled * 0.3) {
-        improvementOpportunities.push('Household energy is high. Ensure heating settings are optimized and appliances are unplugged.');
+      if (cat === 'energy' && recent * SCALE_FACTOR_15_TO_30 > recent30DayScaled * ENERGY_PROPORTION_THRESHOLD) {
+        improvementOpportunities.push(
+          'Household energy is high. Ensure heating settings are optimized and appliances are unplugged.',
+        );
       }
     });
 
     // Add a general trend-based tip
     if (trendDirection === 'increasing') {
-      improvementOpportunities.unshift('Emissions are trending upward. Consider swapping one car trip a day to counter the rise.');
+      improvementOpportunities.unshift(
+        'Emissions are trending upward. Consider swapping one car trip a day to counter the rise.',
+      );
     } else if (trendDirection === 'decreasing') {
-      improvementOpportunities.unshift('Great job! Emissions are trending down. Keep maintaining your car-free or plant-based logs.');
+      improvementOpportunities.unshift(
+        'Great job! Emissions are trending down. Keep maintaining your car-free or plant-based logs.',
+      );
     } else {
-      improvementOpportunities.unshift('Emissions are stable. Look for easy wins like swapping to energy-saving appliances.');
+      improvementOpportunities.unshift(
+        'Emissions are stable. Look for easy wins like swapping to energy-saving appliances.',
+      );
     }
 
     return {
@@ -166,7 +203,7 @@ export class ForecastService {
       trendPercentage,
       goalAchievementProbability,
       riskAreas,
-      improvementOpportunities
+      improvementOpportunities,
     };
   }
 }

@@ -10,7 +10,7 @@ describe('ForecastService Unit Tests', () => {
     targetCo2: 200, // 200 kg monthly limit
     startDate: new Date(),
     endDate: new Date(),
-    achieved: false
+    achieved: false,
   };
 
   it('should return baseline defaults when user has zero activities logged', () => {
@@ -24,7 +24,7 @@ describe('ForecastService Unit Tests', () => {
 
   it('should calculate an increasing trend when recent emissions are higher than prior emissions', () => {
     const now = new Date();
-    
+
     // Create activities:
     // Recent 15 days: 90 kg CO2e
     // Prior 15 days (days 16-30): 45 kg CO2e
@@ -39,7 +39,7 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 90.0,
         timestamp: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
         isRecurring: false,
-        recurrencePeriod: 'none'
+        recurrencePeriod: 'none',
       },
       {
         id: 2,
@@ -51,12 +51,12 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 45.0,
         timestamp: new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000), // 20 days ago
         isRecurring: false,
-        recurrencePeriod: 'none'
-      }
+        recurrencePeriod: 'none',
+      },
     ];
 
     const report = ForecastService.generate(activities, mockGoal);
-    
+
     // Trend should be increasing because recent (90) > prior (45)
     expect(report.trendDirection).toBe('increasing');
     expect(report.trendPercentage).toBe(100); // 100% increase
@@ -67,12 +67,12 @@ describe('ForecastService Unit Tests', () => {
     expect(report.goalAchievementProbability).toBeLessThan(50);
     // Transport should be flagged as a risk area
     expect(report.riskAreas.length).toBeGreaterThan(0);
-    expect(report.riskAreas[0].category).toBe('transport');
+    expect(report.riskAreas[0]!.category).toBe('transport');
   });
 
   it('should calculate a decreasing trend when recent emissions are lower than prior emissions', () => {
     const now = new Date();
-    
+
     // Recent 15 days: 30 kg CO2e
     // Prior 15 days: 60 kg CO2e
     const activities: Activity[] = [
@@ -86,7 +86,7 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 30.0,
         timestamp: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
         isRecurring: false,
-        recurrencePeriod: 'none'
+        recurrencePeriod: 'none',
       },
       {
         id: 2,
@@ -98,8 +98,8 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 60.0,
         timestamp: new Date(now.getTime() - 22 * 24 * 60 * 60 * 1000), // 22 days ago
         isRecurring: false,
-        recurrencePeriod: 'none'
-      }
+        recurrencePeriod: 'none',
+      },
     ];
 
     const report = ForecastService.generate(activities, mockGoal);
@@ -128,7 +128,7 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 90.0,
         timestamp: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
         isRecurring: false,
-        recurrencePeriod: 'none'
+        recurrencePeriod: 'none',
       },
       {
         id: 2,
@@ -140,13 +140,13 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 10.0,
         timestamp: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
         isRecurring: false,
-        recurrencePeriod: 'none'
-      }
+        recurrencePeriod: 'none',
+      },
     ];
 
     const report = ForecastService.generate(activities, mockGoal);
     expect(report.improvementOpportunities).toContain(
-      'Transport accounts for a high proportion of your footprint. Try combining errands or carpooling.'
+      'Transport accounts for a high proportion of your footprint. Try combining errands or carpooling.',
     );
   });
 
@@ -163,8 +163,8 @@ describe('ForecastService Unit Tests', () => {
         co2Emissions: 18.0,
         timestamp: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000), // 45 days ago
         isRecurring: false,
-        recurrencePeriod: 'none'
-      }
+        recurrencePeriod: 'none',
+      },
     ];
 
     const report = ForecastService.generate(activities, mockGoal);

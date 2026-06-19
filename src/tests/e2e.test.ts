@@ -6,8 +6,6 @@ import { ActivityRepository } from '../infrastructure/database/ActivityRepositor
 import { GoalRepository } from '../infrastructure/database/GoalRepository';
 
 describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
-
-
   beforeAll(async () => {
     await db.initializeSchema();
   });
@@ -15,7 +13,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
   beforeEach(async () => {
     await db.query('DELETE FROM users');
     await db.query(
-      "INSERT INTO users (id, email, username, password_hash, points, level, streak) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password', 0, 'Seedling', 0)"
+      "INSERT INTO users (id, email, username, password_hash, points, level, streak) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password', 0, 'Seedling', 0)",
     );
     await db.query('DELETE FROM activities');
     await db.query('DELETE FROM goals');
@@ -93,17 +91,15 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
   // 6b. Log Activity - Recurring activity with custom timestamp
   it('POST /api/activities - should log a recurring activity with custom timestamp', async () => {
     const customTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const res = await request(app)
-      .post('/api/activities')
-      .send({
-        category: 'shopping_waste',
-        subcategory: 'waste',
-        quantity: 5,
-        unit: 'kg',
-        timestamp: customTime,
-        isRecurring: true,
-        recurrencePeriod: 'weekly'
-      });
+    const res = await request(app).post('/api/activities').send({
+      category: 'shopping_waste',
+      subcategory: 'waste',
+      quantity: 5,
+      unit: 'kg',
+      timestamp: customTime,
+      isRecurring: true,
+      recurrencePeriod: 'weekly',
+    });
     expect(res.status).toBe(201);
     expect(res.body.activity.isRecurring).toBe(true);
     expect(res.body.activity.recurrencePeriod).toBe('weekly');
@@ -137,9 +133,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
 
   // 10. Set Goal
   it('POST /api/goals - should set a carbon goal', async () => {
-    const res = await request(app)
-      .post('/api/goals')
-      .send({ targetCo2: 250.0 });
+    const res = await request(app).post('/api/goals').send({ targetCo2: 250.0 });
     expect(res.status).toBe(201);
     expect(res.body.goal.targetCo2).toBe(250.0);
     expect(res.body.goal.achieved).toBe(false);
@@ -147,18 +141,14 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
 
   // 11. Set Goal - Invalid
   it('POST /api/goals - should reject non-positive target', async () => {
-    const res = await request(app)
-      .post('/api/goals')
-      .send({ targetCo2: -10 });
+    const res = await request(app).post('/api/goals').send({ targetCo2: -10 });
     expect(res.status).toBe(400);
   });
 
   // 12. Dashboard
   it('GET /api/dashboard - should compile dashboard data', async () => {
     await seedActivities();
-    await request(app)
-      .post('/api/goals')
-      .send({ targetCo2: 250.0 });
+    await request(app).post('/api/goals').send({ targetCo2: 250.0 });
     const res = await request(app).get('/api/dashboard');
     expect(res.status).toBe(200);
     expect(res.body.emissions.today).toBeGreaterThanOrEqual(0);
@@ -188,9 +178,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
   // 15. Coach Chat
   it('POST /api/coach/chat - should reply to chat', async () => {
     await seedActivities();
-    const res = await request(app)
-      .post('/api/coach/chat')
-      .send({ message: 'How can I reduce transport emissions?' });
+    const res = await request(app).post('/api/coach/chat').send({ message: 'How can I reduce transport emissions?' });
     expect(res.status).toBe(200);
     expect(res.body.reply).toBeTruthy();
     expect(res.body.insights.length).toBeGreaterThan(0);
@@ -198,9 +186,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
 
   // 16. Coach Chat - Empty message
   it('POST /api/coach/chat - should reject empty message', async () => {
-    const res = await request(app)
-      .post('/api/coach/chat')
-      .send({ message: '' });
+    const res = await request(app).post('/api/coach/chat').send({ message: '' });
     expect(res.status).toBe(400);
   });
 
@@ -400,9 +386,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
 
   it('POST /api/goals - should return 400 on database error', async () => {
     const spy = vi.spyOn(GoalRepository.prototype, 'create').mockRejectedValue(new Error('Err'));
-    const res = await request(app)
-      .post('/api/goals')
-      .send({ targetCo2: 200.0 });
+    const res = await request(app).post('/api/goals').send({ targetCo2: 200.0 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Failed to set target goal.');
     spy.mockRestore();
@@ -410,9 +394,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
 
   it('POST /api/coach/chat - should return 404 when user profile not found', async () => {
     const spy = vi.spyOn(UserRepository.prototype, 'findById').mockResolvedValue(null);
-    const res = await request(app)
-      .post('/api/coach/chat')
-      .send({ message: 'Hello' });
+    const res = await request(app).post('/api/coach/chat').send({ message: 'Hello' });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('User profile not found.');
     spy.mockRestore();
@@ -420,9 +402,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
 
   it('POST /api/coach/chat - should return 500 when chat throws', async () => {
     const spy = vi.spyOn(UserRepository.prototype, 'findById').mockRejectedValue(new Error('Err'));
-    const res = await request(app)
-      .post('/api/coach/chat')
-      .send({ message: 'Hello' });
+    const res = await request(app).post('/api/coach/chat').send({ message: 'Hello' });
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Sustainability Coach service failed.');
     spy.mockRestore();
@@ -564,56 +544,64 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
     const oldEnv = process.env.NODE_ENV;
     const oldDbUrl = process.env.DATABASE_URL;
     const oldPort = process.env.PORT;
+    const oldSecret = process.env.JWT_SECRET;
 
     process.env.NODE_ENV = 'production';
     delete process.env.DATABASE_URL;
     process.env.PORT = '5001';
+    process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    vi.resetModules();
-    const { serverInstance } = await import('../presentation/api/server');
-    const server = await serverInstance;
+    try {
+      vi.resetModules();
+      const { serverInstance } = await import('../presentation/api/server');
+      const server = await serverInstance;
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('WARNING: Production mode running with SQLite')
-    );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Production mode running with SQLite'));
 
-    if (server && typeof server.close === 'function') {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (server && typeof server.close === 'function') {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    } finally {
+      process.env.NODE_ENV = oldEnv;
+      if (oldDbUrl) {
+        process.env.DATABASE_URL = oldDbUrl;
+      } else {
+        delete process.env.DATABASE_URL;
+      }
+      if (oldPort) {
+        process.env.PORT = oldPort;
+      } else {
+        delete process.env.PORT;
+      }
+      if (oldSecret) {
+        process.env.JWT_SECRET = oldSecret;
+      } else {
+        delete process.env.JWT_SECRET;
+      }
+      warnSpy.mockRestore();
+      logSpy.mockRestore();
+      vi.resetModules();
     }
-
-    process.env.NODE_ENV = oldEnv;
-    if (oldDbUrl) {
-      process.env.DATABASE_URL = oldDbUrl;
-    } else {
-      delete process.env.DATABASE_URL;
-    }
-    if (oldPort) {
-      process.env.PORT = oldPort;
-    } else {
-      delete process.env.PORT;
-    }
-    warnSpy.mockRestore();
-    logSpy.mockRestore();
   });
 
   it('handles generic internal server errors gracefully', async () => {
     const layers = (app as any)._router.stack;
-    const authLayer = layers.find((l: any) => l.handle && l.handle.name === 'authenticateToken');
-    
-    if (authLayer) {
+    const authLayer = layers.find((l: any) => l.handle?.name === 'authenticateToken');
+
+    if (authLayer !== undefined) {
       const originalHandle = authLayer.handle;
       authLayer.handle = (_req: any, _res: any, next: any) => {
         next(new Error('Test internal error'));
       };
-      
+
       try {
         const res = await request(app).get('/api/dashboard');
         expect(res.status).toBe(500);
         expect(res.body).toHaveProperty('error', 'Internal server error');
-        expect(res.body).toHaveProperty('details', 'Test internal error');
+        // Security hardening: error details are never leaked to the client
       } finally {
         authLayer.handle = originalHandle;
       }
@@ -623,35 +611,45 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
   it('wildcard SPA route in production', async () => {
     const oldEnv = process.env.NODE_ENV;
     const oldPort = process.env.PORT;
-    
+    const oldSecret = process.env.JWT_SECRET;
+
     process.env.NODE_ENV = 'production';
     process.env.PORT = '5002';
-    
-    vi.resetModules();
-    const { app: prodApp, serverInstance } = await import('../presentation/api/server');
-    const server = await serverInstance;
-    
-    const res = await request(prodApp).get('/some-spa-route');
-    expect(res.status).toBeDefined();
-    
-    if (server && typeof server.close === 'function') {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+    process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
+
+    try {
+      vi.resetModules();
+      const { app: prodApp, serverInstance } = await import('../presentation/api/server');
+      const server = await serverInstance;
+
+      const res = await request(prodApp).get('/some-spa-route');
+      expect(res.status).toBeDefined();
+
+      if (server && typeof server.close === 'function') {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    } finally {
+      process.env.NODE_ENV = oldEnv;
+      if (oldPort) {
+        process.env.PORT = oldPort;
+      } else {
+        delete process.env.PORT;
+      }
+      if (oldSecret) {
+        process.env.JWT_SECRET = oldSecret;
+      } else {
+        delete process.env.JWT_SECRET;
+      }
+      vi.resetModules();
     }
-    
-    process.env.NODE_ENV = oldEnv;
-    if (oldPort) {
-      process.env.PORT = oldPort;
-    } else {
-      delete process.env.PORT;
-    }
-    vi.resetModules();
   });
 
   it('GET /api/activities - should accept valid endDate and startDate filters', async () => {
     const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const end = new Date().toISOString();
-    const res = await request(app)
-      .get(`/api/activities?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`);
+    const res = await request(app).get(
+      `/api/activities?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`,
+    );
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('activities');
     expect(res.body).toHaveProperty('total');
@@ -677,7 +675,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
         getIsPostgres = () => true;
         query = vi.fn().mockResolvedValue([]);
         close = vi.fn().mockResolvedValue(undefined);
-      }
+      },
     }));
 
     vi.resetModules();
@@ -691,7 +689,7 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
     }
 
     // The log 'Database: PostgreSQL' should be called since DATABASE_URL is set
-    const dbLog = logSpy.mock.calls.find(call => String(call[0]).includes('Database:'));
+    const dbLog = logSpy.mock.calls.find((call) => String(call[0]).includes('Database:'));
     if (dbLog) {
       expect(String(dbLog[0])).toContain('PostgreSQL');
     } else {
@@ -722,11 +720,16 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
   }, 15000); // 15 second timeout for module-level startup
 
   it('server startup database setup crash path', async () => {
+    const oldEnv = process.env.NODE_ENV;
+    const oldSecret = process.env.JWT_SECRET;
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
+
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    
+
     vi.doMock('../infrastructure/database/DatabaseConnection', () => {
       return {
         DatabaseConnection: class {
@@ -734,29 +737,108 @@ describe('EcoTrack AI Full-Stack End-to-End API Integration Tests', () => {
           getIsPostgres = () => false;
           query = vi.fn().mockResolvedValue([]);
           close = vi.fn().mockResolvedValue(undefined);
-        }
+        },
       };
     });
-    
-    vi.resetModules();
+
     try {
+      vi.resetModules();
       const { serverInstance } = await import('../presentation/api/server');
       await serverInstance;
     } catch (err: any) {
       expect(err.message).toBe('process.exit called');
+    } finally {
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Database Schema] Setup crash:'),
+        expect.any(Error),
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+
+      process.env.NODE_ENV = oldEnv;
+      if (oldSecret) {
+        process.env.JWT_SECRET = oldSecret;
+      } else {
+        delete process.env.JWT_SECRET;
+      }
+      vi.doUnmock('../infrastructure/database/DatabaseConnection');
+      vi.resetModules();
     }
-    
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[Database Schema] Setup crash:'),
-      expect.any(Error)
-    );
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    
-    exitSpy.mockRestore();
-    errorSpy.mockRestore();
-    
-    vi.doUnmock('../infrastructure/database/DatabaseConnection');
-    vi.resetModules();
+  });
+
+  it('Authentication - should reject requests with dummy-token bypass in all modes', async () => {
+    const res = await request(app).get('/api/auth/me').set('Authorization', 'Bearer dummy-token');
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('Invalid or expired authentication token');
+  });
+
+  it('Authentication - should fail fast at startup if JWT_SECRET is missing in production mode', async () => {
+    const oldEnv = process.env.NODE_ENV;
+    const oldSecret = process.env.JWT_SECRET;
+    process.env.NODE_ENV = 'production';
+    delete process.env.JWT_SECRET;
+    try {
+      vi.resetModules();
+      await expect(import('../presentation/api/middleware/auth')).rejects.toThrow(
+        'JWT_SECRET must be set in production',
+      );
+    } finally {
+      process.env.NODE_ENV = oldEnv;
+      if (oldSecret) {
+        process.env.JWT_SECRET = oldSecret;
+      }
+      vi.resetModules();
+    }
+  });
+
+  it('404 handler - should return static error message without reflecting user path', async () => {
+    const res = await request(app).get('/api/this-path-does-not-exist-xyz');
+    expect(res.status).toBe(404);
+    // @security: The 404 body must NOT echo back the user-supplied path (CWE-209 reflection)
+    expect(res.body.error).toBe('Route not found.');
+    expect(res.body.error).not.toContain('this-path-does-not-exist-xyz');
+  });
+
+  it('server startup logs Auth mode: PERMISSIVE warning when AUTH_REQUIRED is not set', async () => {
+    const oldEnv = process.env.NODE_ENV;
+    const oldSecret = process.env.JWT_SECRET;
+    const oldPort = process.env.PORT;
+    const oldAuthRequired = process.env.AUTH_REQUIRED;
+
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
+    process.env.PORT = '5005';
+    delete process.env.AUTH_REQUIRED;
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      vi.resetModules();
+      const { serverInstance } = await import('../presentation/api/server');
+      const server = await serverInstance;
+
+      // Should warn that AUTH_REQUIRED is not set in production
+      const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
+      const hasAuthWarn = warnCalls.some((msg) => msg.includes('AUTH_REQUIRED'));
+      expect(hasAuthWarn).toBe(true);
+
+      if (server && typeof server.close === 'function') {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    } finally {
+      process.env.NODE_ENV = oldEnv;
+      process.env.JWT_SECRET = oldSecret || '';
+      if (!oldSecret) delete process.env.JWT_SECRET;
+      if (oldPort) process.env.PORT = oldPort;
+      else delete process.env.PORT;
+      if (oldAuthRequired) process.env.AUTH_REQUIRED = oldAuthRequired;
+      else delete process.env.AUTH_REQUIRED;
+      infoSpy.mockRestore();
+      warnSpy.mockRestore();
+      vi.resetModules();
+    }
   });
 });
-

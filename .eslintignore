@@ -1,0 +1,5 @@
+dist/
+coverage/
+public/
+*.config.js
+*.config.ts

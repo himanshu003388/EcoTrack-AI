@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../main';
+import React, { useState, useEffect, useRef, memo } from 'react';
+import { useAuth, apiFetch } from '../main';
+import { usePageTitle } from '../components/Hooks';
 import { MessageSquareText, Send, Sparkles, User } from 'lucide-react';
 
 interface ChatMessage {
@@ -10,9 +11,11 @@ interface ChatMessage {
   suggestions?: string[] | undefined;
 }
 
-export const Coach: React.FC = () => {
+export const Coach: React.FC = memo(() => {
   const { token, user } = useAuth();
-  
+
+  usePageTitle('AI Eco Coach');
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,9 +40,9 @@ export const Coach: React.FC = () => {
             'How can I reduce transport emissions?',
             'Give me 3 simple actions to try today',
             'Analyze my carbon logs stats',
-            'What is the biggest impact I can make?'
-          ]
-        }
+            'What is the biggest impact I can make?',
+          ],
+        },
       ]);
     }
   }, [user]);
@@ -64,20 +67,20 @@ export const Coach: React.FC = () => {
     const userMsg: ChatMessage = {
       id: Date.now(),
       sender: 'user',
-      text: textToSend
+      text: textToSend,
     };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInputMessage('');
     setLoading(true);
 
     try {
-      const res = await fetch('/api/coach/chat', {
+      const res = await apiFetch('/api/coach/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          ...(token !== null ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ message: textToSend })
+        body: JSON.stringify({ message: textToSend }),
       });
       const data = (await res.json()) as { reply: string; insights?: string[]; suggestions?: string[] };
       if (res.ok) {
@@ -86,24 +89,24 @@ export const Coach: React.FC = () => {
           sender: 'coach',
           text: data.reply,
           insights: data.insights,
-          suggestions: data.suggestions
+          suggestions: data.suggestions,
         };
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
-          setMessages(prev => [...prev, coachMsg]);
+          setMessages((prev) => [...prev, coachMsg]);
           setLoading(false);
         }, 600);
       } else {
         throw new Error('Chat failed');
       }
     } catch {
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           sender: 'coach',
-          text: "I'm having trouble connecting to the network right now. Please make sure you are logged in or try again in a moment!"
-        }
+          text: "I'm having trouble connecting to the network right now. Please make sure you are logged in or try again in a moment!",
+        },
       ]);
       setLoading(false);
     }
@@ -115,7 +118,10 @@ export const Coach: React.FC = () => {
   };
 
   return (
-    <section className="flex flex-col min-h-[calc(100dvh-8rem)] bg-white dark:bg-forest-900 border border-slate-100 dark:border-forest-800 rounded-[32px] shadow-sm overflow-hidden transition-colors duration-200" aria-label="AI Eco Coach Chat">
+    <section
+      className="flex flex-col min-h-[calc(100dvh-8rem)] bg-white dark:bg-forest-900 border border-slate-100 dark:border-forest-800 rounded-[32px] shadow-sm overflow-hidden transition-colors duration-200"
+      aria-label="AI Eco Coach Chat"
+    >
       <header className="px-6 py-4 bg-white dark:bg-forest-900 border-b border-slate-100 dark:border-forest-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-forest-500 text-white shadow-md shadow-forest-500/10">
@@ -146,26 +152,40 @@ export const Coach: React.FC = () => {
               msg.sender === 'user' ? 'ml-auto flex-row-reverse' : ''
             }`}
           >
-            <div className={`h-8 w-8 rounded-full shrink-0 flex items-center justify-center font-bold text-xs ${
-              msg.sender === 'user' ? 'bg-slate-200 dark:bg-forest-700 text-slate-600 dark:text-slate-300' : 'bg-forest-500 text-white'
-            }`} aria-hidden="true">
+            <div
+              className={`h-8 w-8 rounded-full shrink-0 flex items-center justify-center font-bold text-xs ${
+                msg.sender === 'user'
+                  ? 'bg-slate-200 dark:bg-forest-700 text-slate-600 dark:text-slate-300'
+                  : 'bg-forest-500 text-white'
+              }`}
+              aria-hidden="true"
+            >
               {msg.sender === 'user' ? <User className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
             </div>
 
             <div className="space-y-3">
-              <div className={`p-4 rounded-3xl text-sm leading-relaxed whitespace-pre-line shadow-sm border ${
-                msg.sender === 'user'
-                  ? 'bg-forest-500 text-white border-forest-600 rounded-tr-none'
-                  : 'bg-white dark:bg-forest-800 text-slate-800 dark:text-slate-200 border-slate-100 dark:border-forest-700 rounded-tl-none'
-              }`}>
+              <div
+                className={`p-4 rounded-3xl text-sm leading-relaxed whitespace-pre-line shadow-sm border ${
+                  msg.sender === 'user'
+                    ? 'bg-forest-500 text-white border-forest-600 rounded-tr-none'
+                    : 'bg-white dark:bg-forest-800 text-slate-800 dark:text-slate-200 border-slate-100 dark:border-forest-700 rounded-tl-none'
+                }`}
+              >
+                <span className="sr-only">{msg.sender === 'user' ? 'You said:' : 'Eco Coach said:'} </span>
                 {msg.text}
               </div>
 
               {msg.insights && msg.insights.length > 0 && (
                 <div className="space-y-1.5 pl-2" role="list" aria-label="Insights">
                   {msg.insights.map((ins, idx) => (
-                    <div key={idx} className="flex gap-1.5 items-start text-[11px] font-semibold text-slate-500 dark:text-slate-400" role="listitem">
-                      <span className="text-forest-500 shrink-0" aria-hidden="true">✦</span>
+                    <div
+                      key={idx}
+                      className="flex gap-1.5 items-start text-[11px] font-semibold text-slate-500 dark:text-slate-400"
+                      role="listitem"
+                    >
+                      <span className="text-forest-500 shrink-0" aria-hidden="true">
+                        ✦
+                      </span>
                       <p>{ins}</p>
                     </div>
                   ))}
@@ -177,7 +197,9 @@ export const Coach: React.FC = () => {
                   {msg.suggestions.map((sug, idx) => (
                     <button
                       key={idx}
-                      onClick={() => { void handleSendMessage(sug); }}
+                      onClick={() => {
+                        void handleSendMessage(sug);
+                      }}
                       className="px-3.5 py-1.5 bg-white dark:bg-forest-800 hover:bg-forest-50 dark:hover:bg-forest-700 border border-slate-200/60 dark:border-forest-700 hover:border-forest-200 dark:hover:border-forest-600 text-slate-600 dark:text-slate-300 hover:text-forest-700 dark:hover:text-forest-300 rounded-full text-xs font-semibold transition-all duration-200 shadow-sm"
                     >
                       {sug}
@@ -191,13 +213,25 @@ export const Coach: React.FC = () => {
 
         {loading && (
           <div className="flex gap-3 max-w-[75%]" aria-label="Coach is typing" role="status">
-            <div className="h-8 w-8 rounded-full bg-forest-500 text-white shrink-0 flex items-center justify-center" aria-hidden="true">
+            <div
+              className="h-8 w-8 rounded-full bg-forest-500 text-white shrink-0 flex items-center justify-center"
+              aria-hidden="true"
+            >
               <Sparkles className="h-4 w-4" />
             </div>
-            <div className="p-4 bg-white dark:bg-forest-800 border border-slate-100 dark:border-forest-700 rounded-3xl rounded-tl-none flex items-center gap-1.5 shadow-sm" aria-hidden="true">
+            <div
+              className="p-4 bg-white dark:bg-forest-800 border border-slate-100 dark:border-forest-700 rounded-3xl rounded-tl-none flex items-center gap-1.5 shadow-sm"
+              aria-hidden="true"
+            >
               <span className="h-2 w-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"></span>
-              <span className="h-2 w-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-              <span className="h-2 w-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+              <span
+                className="h-2 w-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
+                style={{ animationDelay: '0.2s' }}
+              ></span>
+              <span
+                className="h-2 w-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"
+                style={{ animationDelay: '0.4s' }}
+              ></span>
             </div>
             <span className="sr-only">Eco Coach is generating a response...</span>
           </div>
@@ -207,7 +241,9 @@ export const Coach: React.FC = () => {
 
       <footer className="p-4 bg-white dark:bg-forest-900 border-t border-slate-100 dark:border-forest-800">
         <form onSubmit={handleSubmit} className="flex gap-2" role="form" aria-label="Message input">
-          <label htmlFor="coach-input" className="sr-only">Ask your Eco Coach a question</label>
+          <label htmlFor="coach-input" className="sr-only">
+            Ask your Eco Coach a question
+          </label>
           <input
             id="coach-input"
             type="text"
@@ -230,4 +266,4 @@ export const Coach: React.FC = () => {
       </footer>
     </section>
   );
-};
+});

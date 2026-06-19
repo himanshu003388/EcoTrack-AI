@@ -38,7 +38,7 @@ describe('Layout', () => {
         <Layout>
           <p>Main content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByText('EcoTrack')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const skipLink = screen.getByText('Skip to main content');
     expect(skipLink).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const main = screen.getByRole('main');
     expect(main).toHaveAttribute('id', 'main-content');
@@ -79,7 +79,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     // The nav element (not its outer container) carries the accessible label and navigation role
     const sidebar = screen.getByRole('navigation', { name: 'Main navigation' });
@@ -92,7 +92,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const header = document.querySelector('header');
     expect(header).toHaveAttribute('role', 'banner');
@@ -104,7 +104,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const toggle = screen.getByLabelText('Switch to dark mode');
     expect(toggle).toBeInTheDocument();
@@ -116,12 +116,11 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const stats = screen.getByLabelText('User statistics');
     expect(stats).toHaveAttribute('role', 'status');
   });
-
 
   it('streak has accessible label', () => {
     render(
@@ -129,7 +128,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     // Both desktop and mobile streak badges carry the same aria-label (by design for responsiveness)
     const streakElements = screen.getAllByLabelText('7 day streak');
@@ -142,7 +141,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.getByLabelText('250 experience points')).toBeInTheDocument();
   });
@@ -153,10 +152,40 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const activeLink = screen.getByText('Activity Tracker').closest('a');
     expect(activeLink).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('mobile menu button has correct aria-controls', () => {
+    render(
+      <MemoryRouter>
+        <Layout>
+          <p>Content</p>
+        </Layout>
+      </MemoryRouter>,
+    );
+    const openButton = screen.getByLabelText('Open navigation menu');
+    expect(openButton).toHaveAttribute('aria-controls', 'mobile-menu');
+    expect(openButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('nav links have unique accessible names', () => {
+    render(
+      <MemoryRouter initialEntries={['/tracker']}>
+        <Layout>
+          <p>Content</p>
+        </Layout>
+      </MemoryRouter>,
+    );
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+    expect(nav).toBeInTheDocument();
+    const links = nav.querySelectorAll('a');
+    expect(links.length).toBe(7);
+    links.forEach((link) => {
+      expect(link.textContent?.trim()).toBeTruthy();
+    });
   });
 
   it('has no accessibility violations', async () => {
@@ -165,7 +194,7 @@ describe('Layout', () => {
         <Layout>
           <p>Content</p>
         </Layout>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     const results = await axe(container);
     await expect(results).toHaveNoViolations();

@@ -18,19 +18,30 @@ import type { Activity, ActivityCategory } from '../domain/entities/Activity';
 import type { DatabaseConnection } from '../infrastructure/database/DatabaseConnection';
 
 const makeUser = (overrides: Partial<User> = {}): User => ({
-  id: 1, email: 'test@test.com', username: 'TestUser',
-  passwordHash: 'hash', points: 100, level: 'Sapling',
-  streak: 3, createdAt: new Date(), ...overrides,
+  id: 1,
+  email: 'test@test.com',
+  username: 'TestUser',
+  passwordHash: 'hash',
+  points: 100,
+  level: 'Sapling',
+  streak: 3,
+  createdAt: new Date(),
+  ...overrides,
 });
 
 const makeActivity = (overrides: Partial<Activity> = {}): Activity => ({
-  id: 1, userId: 1, category: 'transport',
-  subcategory: 'car_petrol', quantity: 10, unit: 'km',
-  co2Emissions: 1.8, timestamp: new Date(),
-  isRecurring: false, recurrencePeriod: 'none', ...overrides,
+  id: 1,
+  userId: 1,
+  category: 'transport',
+  subcategory: 'car_petrol',
+  quantity: 10,
+  unit: 'km',
+  co2Emissions: 1.8,
+  timestamp: new Date(),
+  isRecurring: false,
+  recurrencePeriod: 'none',
+  ...overrides,
 });
-
-
 
 describe('LogActivity use case', () => {
   const mockActivityRepo: IActivityRepository = {
@@ -61,8 +72,11 @@ describe('LogActivity use case', () => {
   it('should log an activity and update points', async () => {
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, mockChallengeRepo);
     const result = await logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
+      userId: 1,
+      category: 'transport',
+      subcategory: 'car_petrol',
+      quantity: 10,
+      unit: 'km',
     });
     expect(result.category).toBe('transport');
     expect(mockUserRepo.updatePointsAndLevel).toHaveBeenCalled();
@@ -70,47 +84,72 @@ describe('LogActivity use case', () => {
 
   it('should throw for invalid category', async () => {
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, mockChallengeRepo);
-    await expect(logActivity.execute({
-      userId: 1, category: 'invalid' as ActivityCategory,
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
-    })).rejects.toThrow();
+    await expect(
+      logActivity.execute({
+        userId: 1,
+        category: 'invalid' as ActivityCategory,
+        subcategory: 'car_petrol',
+        quantity: 10,
+        unit: 'km',
+      }),
+    ).rejects.toThrow();
   });
 
   it('should throw for invalid subcategory', async () => {
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, mockChallengeRepo);
-    await expect(logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'invalid_sub', quantity: 10, unit: 'km',
-    })).rejects.toThrow('Invalid subcategory: "invalid_sub" for category "transport".');
+    await expect(
+      logActivity.execute({
+        userId: 1,
+        category: 'transport',
+        subcategory: 'invalid_sub',
+        quantity: 10,
+        unit: 'km',
+      }),
+    ).rejects.toThrow('Invalid subcategory: "invalid_sub" for category "transport".');
   });
 
   it('should reject a future timestamp', async () => {
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, mockChallengeRepo);
     const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // tomorrow
-    await expect(logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
-      timestamp: futureDate,
-    })).rejects.toThrow('Activity timestamp cannot be in the future.');
+    await expect(
+      logActivity.execute({
+        userId: 1,
+        category: 'transport',
+        subcategory: 'car_petrol',
+        quantity: 10,
+        unit: 'km',
+        timestamp: futureDate,
+      }),
+    ).rejects.toThrow('Activity timestamp cannot be in the future.');
   });
 
   it('should log a recurring activity with recurrencePeriod', async () => {
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, mockChallengeRepo);
     const result = await logActivity.execute({
-      userId: 1, category: 'energy',
-      subcategory: 'electricity', quantity: 50, unit: 'kWh',
-      isRecurring: true, recurrencePeriod: 'daily',
+      userId: 1,
+      category: 'energy',
+      subcategory: 'electricity',
+      quantity: 50,
+      unit: 'kWh',
+      isRecurring: true,
+      recurrencePeriod: 'daily',
     });
     expect(result.category).toBe('transport'); // mock returns transport activity
     expect(mockActivityRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ isRecurring: true, recurrencePeriod: 'daily' })
+      expect.objectContaining({ isRecurring: true, recurrencePeriod: 'daily' }),
     );
   });
 
   it('should progress matching active challenges', async () => {
     const activeChallenge = {
-      challengeId: 1, userId: 1, status: 'active' as const, progress: 2,
-      startedAt: new Date(), category: 'transport', durationDays: 7, pointsReward: 50,
+      challengeId: 1,
+      userId: 1,
+      status: 'active' as const,
+      progress: 2,
+      startedAt: new Date(),
+      category: 'transport',
+      durationDays: 7,
+      pointsReward: 50,
     };
     const challengeRepoWithJoined = {
       ...mockChallengeRepo,
@@ -118,16 +157,25 @@ describe('LogActivity use case', () => {
     };
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, challengeRepoWithJoined);
     await logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
+      userId: 1,
+      category: 'transport',
+      subcategory: 'car_petrol',
+      quantity: 10,
+      unit: 'km',
     });
     expect(challengeRepoWithJoined.updateChallengeProgress).toHaveBeenCalledWith(1, 1, 3, 'active');
   });
 
   it('should complete active challenge when progress target is reached', async () => {
     const activeChallenge = {
-      challengeId: 1, userId: 1, status: 'active' as const, progress: 6,
-      startedAt: new Date(), category: 'transport', durationDays: 7, pointsReward: 50,
+      challengeId: 1,
+      userId: 1,
+      status: 'active' as const,
+      progress: 6,
+      startedAt: new Date(),
+      category: 'transport',
+      durationDays: 7,
+      pointsReward: 50,
     };
     const challengeRepoWithJoined = {
       ...mockChallengeRepo,
@@ -135,8 +183,11 @@ describe('LogActivity use case', () => {
     };
     const logActivity = new LogActivity(mockActivityRepo, mockUserRepo, challengeRepoWithJoined);
     await logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
+      userId: 1,
+      category: 'transport',
+      subcategory: 'car_petrol',
+      quantity: 10,
+      unit: 'km',
     });
     expect(challengeRepoWithJoined.updateChallengeProgress).toHaveBeenCalledWith(1, 1, 7, 'completed');
     expect(mockUserRepo.updatePointsAndLevel).toHaveBeenCalled();
@@ -149,8 +200,11 @@ describe('LogActivity use case', () => {
     };
     const logActivity = new LogActivity(actRepoWithStreakReset, mockUserRepo, mockChallengeRepo);
     await logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
+      userId: 1,
+      category: 'transport',
+      subcategory: 'car_petrol',
+      quantity: 10,
+      unit: 'km',
     });
     expect(mockUserRepo.updateStreak).toHaveBeenCalledWith(1, 0);
   });
@@ -166,8 +220,11 @@ describe('LogActivity use case', () => {
     };
     const logActivity = new LogActivity(actRepoWithNewStreak, userRepoWithNoStreak, mockChallengeRepo);
     await logActivity.execute({
-      userId: 1, category: 'transport',
-      subcategory: 'car_petrol', quantity: 10, unit: 'km',
+      userId: 1,
+      category: 'transport',
+      subcategory: 'car_petrol',
+      quantity: 10,
+      unit: 'km',
     });
     expect(mockUserRepo.updateStreak).toHaveBeenCalledWith(1, 1);
   });
@@ -188,7 +245,7 @@ describe('GetActivities use case', () => {
     const getActivities = new GetActivities(mockActivityRepo);
     const result = await getActivities.execute(1);
     expect(result.activities.length).toBe(1);
-    expect(result.activities[0].category).toBe('transport');
+    expect(result.activities[0]!.category).toBe('transport');
   });
 
   it('should pass filters to repository', async () => {
@@ -263,7 +320,7 @@ describe('GetDashboardData use case', () => {
       ...mockActivityRepo,
       findByUserId: vi.fn().mockResolvedValue({
         activities: [makeActivity({ co2Emissions: 1, timestamp: new Date() })],
-        total: 1
+        total: 1,
       }),
       getCategorySummary: vi.fn().mockResolvedValue([]),
       getDailyEmissionsSummary: vi.fn().mockResolvedValue([]),
@@ -279,7 +336,7 @@ describe('GetDashboardData use case', () => {
       ...mockActivityRepo,
       findByUserId: vi.fn().mockResolvedValue({
         activities: [makeActivity({ co2Emissions: 10, timestamp: new Date() })],
-        total: 1
+        total: 1,
       }),
       getCategorySummary: vi.fn().mockResolvedValue([]),
       getDailyEmissionsSummary: vi.fn().mockResolvedValue([]),
@@ -296,7 +353,7 @@ describe('GetDashboardData use case', () => {
       ...mockActivityRepo,
       findByUserId: vi.fn().mockResolvedValue({
         activities: [makeActivity({ co2Emissions: 20, timestamp: new Date() })],
-        total: 1
+        total: 1,
       }),
       getCategorySummary: vi.fn().mockResolvedValue([]),
       getDailyEmissionsSummary: vi.fn().mockResolvedValue([]),
@@ -355,14 +412,14 @@ describe('GetForecast use case', () => {
   it('should fallback nextMonthEstimate to defaultEstimate when recent emissions are 0', async () => {
     const priorActivity = makeActivity({
       co2Emissions: 10,
-      timestamp: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)
+      timestamp: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
     });
     const repoWithPrior = {
       ...mockActivityRepo,
       findByUserId: vi.fn().mockResolvedValue({
         activities: [priorActivity],
-        total: 1
-      })
+        total: 1,
+      }),
     };
     const getForecast = new GetForecast(repoWithPrior, mockGoalRepo);
     const result = await getForecast.execute(1);
@@ -373,8 +430,8 @@ describe('GetForecast use case', () => {
     const activities = [
       makeActivity({
         co2Emissions: -10,
-        timestamp: new Date()
-      })
+        timestamp: new Date(),
+      }),
     ];
     const report = ForecastService.generate(activities, null);
     expect(report.nextMonthEstimate).toBe(0);
@@ -411,14 +468,44 @@ describe('GetRecommendations use case', () => {
 
 describe('ManageChallenges use case', () => {
   const mockChallengeRepo: IChallengeRepository = {
-    listAll: vi.fn().mockResolvedValue([
-      { id: 1, title: 'Test Challenge', category: 'transport', description: 'Desc', pointsReward: 50, co2Target: 20, durationDays: 7 },
-    ]),
-    findById: vi.fn().mockResolvedValue({ id: 1, title: 'Test', category: 'transport', description: 'Desc', pointsReward: 50, co2Target: 20, durationDays: 7 }),
+    listAll: vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: 1,
+          title: 'Test Challenge',
+          category: 'transport',
+          description: 'Desc',
+          pointsReward: 50,
+          co2Target: 20,
+          durationDays: 7,
+        },
+      ]),
+    findById: vi
+      .fn()
+      .mockResolvedValue({
+        id: 1,
+        title: 'Test',
+        category: 'transport',
+        description: 'Desc',
+        pointsReward: 50,
+        co2Target: 20,
+        durationDays: 7,
+      }),
     getUserChallenges: vi.fn().mockResolvedValue([]),
     getUserChallenge: vi.fn().mockResolvedValue(null),
-    joinChallenge: vi.fn().mockResolvedValue({ userId: 1, challengeId: 1, status: 'active' as const, progress: 0, startedAt: new Date() }),
-    updateChallengeProgress: vi.fn().mockResolvedValue({ userId: 1, challengeId: 1, status: 'completed' as const, progress: 7, startedAt: new Date() }),
+    joinChallenge: vi
+      .fn()
+      .mockResolvedValue({ userId: 1, challengeId: 1, status: 'active' as const, progress: 0, startedAt: new Date() }),
+    updateChallengeProgress: vi
+      .fn()
+      .mockResolvedValue({
+        userId: 1,
+        challengeId: 1,
+        status: 'completed' as const,
+        progress: 7,
+        startedAt: new Date(),
+      }),
   };
   const mockUserRepo: IUserRepository = {
     findByEmail: vi.fn(),
@@ -453,7 +540,15 @@ describe('ManageChallenges use case', () => {
   it('should complete a challenge', async () => {
     const repoWithJoined = {
       ...mockChallengeRepo,
-      getUserChallenge: vi.fn().mockResolvedValue({ userId: 1, challengeId: 1, status: 'active' as const, progress: 3, startedAt: new Date() }),
+      getUserChallenge: vi
+        .fn()
+        .mockResolvedValue({
+          userId: 1,
+          challengeId: 1,
+          status: 'active' as const,
+          progress: 3,
+          startedAt: new Date(),
+        }),
     };
     const manage = new ManageChallenges(repoWithJoined, mockUserRepo);
     const result = await manage.complete(1, 1);
@@ -468,7 +563,15 @@ describe('ManageChallenges use case', () => {
   it('should return challenge if already completed', async () => {
     const repoWithCompleted = {
       ...mockChallengeRepo,
-      getUserChallenge: vi.fn().mockResolvedValue({ userId: 1, challengeId: 1, status: 'completed' as const, progress: 7, startedAt: new Date() }),
+      getUserChallenge: vi
+        .fn()
+        .mockResolvedValue({
+          userId: 1,
+          challengeId: 1,
+          status: 'completed' as const,
+          progress: 7,
+          startedAt: new Date(),
+        }),
     };
     const manage = new ManageChallenges(repoWithCompleted, mockUserRepo);
     const result = await manage.complete(1, 1);
@@ -478,7 +581,15 @@ describe('ManageChallenges use case', () => {
   it('should throw error when completing a joined challenge where the challenge details are missing', async () => {
     const repoWithMissingDetails = {
       ...mockChallengeRepo,
-      getUserChallenge: vi.fn().mockResolvedValue({ userId: 1, challengeId: 1, status: 'active' as const, progress: 3, startedAt: new Date() }),
+      getUserChallenge: vi
+        .fn()
+        .mockResolvedValue({
+          userId: 1,
+          challengeId: 1,
+          status: 'active' as const,
+          progress: 3,
+          startedAt: new Date(),
+        }),
       findById: vi.fn().mockResolvedValue(null),
     };
     const manage = new ManageChallenges(repoWithMissingDetails, mockUserRepo);
@@ -488,7 +599,15 @@ describe('ManageChallenges use case', () => {
   it('should complete challenge successfully even when user is not found', async () => {
     const repoWithJoined = {
       ...mockChallengeRepo,
-      getUserChallenge: vi.fn().mockResolvedValue({ userId: 1, challengeId: 1, status: 'active' as const, progress: 3, startedAt: new Date() }),
+      getUserChallenge: vi
+        .fn()
+        .mockResolvedValue({
+          userId: 1,
+          challengeId: 1,
+          status: 'active' as const,
+          progress: 3,
+          startedAt: new Date(),
+        }),
     };
     const userRepoWithNoUser = {
       ...mockUserRepo,

@@ -11,8 +11,24 @@
   },
   "rules": {
     "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/explicit-function-return-type": "warn",
-    "no-console": "warn"
+    "@typescript-eslint/explicit-function-return-type": "error",
+    "@typescript-eslint/explicit-module-boundary-types": "error",
+    "@typescript-eslint/no-floating-promises": "error",
+    "@typescript-eslint/promise-function-async": "error",
+    "@typescript-eslint/prefer-nullish-coalescing": "error",
+    "@typescript-eslint/no-unnecessary-condition": "error",
+    "@typescript-eslint/strict-boolean-expressions": "error",
+    "@typescript-eslint/switch-exhaustiveness-check": "error",
+    "@typescript-eslint/prefer-optional-chain": "error",
+    "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
+    "@typescript-eslint/method-signature-style": "error",
+    "no-console": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "prefer-template": "error",
+    "no-unneeded-ternary": "error",
+    "object-shorthand": "error",
+    "eqeqeq": ["error", "smart"]
   },
   "overrides": [
     {
@@ -26,10 +42,16 @@
         "@typescript-eslint/no-unsafe-argument": "off",
         "@typescript-eslint/unbound-method": "off",
         "@typescript-eslint/explicit-function-return-type": "off",
+        "@typescript-eslint/explicit-module-boundary-types": "off",
+        "@typescript-eslint/no-floating-promises": "off",
         "@typescript-eslint/await-thenable": "off",
         "@typescript-eslint/no-unused-vars": "off",
         "@typescript-eslint/no-unnecessary-type-assertion": "off",
         "@typescript-eslint/require-await": "off",
+        "@typescript-eslint/prefer-nullish-coalescing": "off",
+        "@typescript-eslint/no-unnecessary-condition": "off",
+        "@typescript-eslint/strict-boolean-expressions": "off",
+        "@typescript-eslint/promise-function-async": "off",
         "no-console": "off"
       }
     }

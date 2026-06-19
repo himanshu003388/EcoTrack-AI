@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full" dir="ltr">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>" />
@@ -7,25 +7,18 @@
     <meta name="description" content="EcoTrack AI - Understand, Track, and Reduce your personal carbon footprint with real-time analytics, AI sustainability coaching, and community challenges." />
     <meta name="theme-color" content="#1E3F20" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0a140a" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="author" content="EcoTrack AI" />
+    <meta name="application-name" content="EcoTrack AI" />
     <title>EcoTrack AI - Sustainability & Carbon Footprint Platform</title>
-    <script>
-      (function() {
-        var saved = localStorage.getItem('ecotrack_theme');
-        var isDark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (isDark) {
-          document.documentElement.classList.add('dark');
-          document.documentElement.style.colorScheme = 'dark';
-        } else {
-          document.documentElement.style.colorScheme = 'light';
-        }
-      })();
-    </script>
+    <script src="/theme.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body class="h-full bg-slate-50 dark:bg-forest-950 text-slate-800 dark:text-slate-100 antialiased font-sans transition-colors duration-200">
     <div id="root" class="h-full"></div>
+    <div id="a11y-announcements" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="/src/presentation/web/main.tsx"></script>
   </body>
 </html>

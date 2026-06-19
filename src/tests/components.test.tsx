@@ -8,7 +8,6 @@ import { ToastProvider, useToast } from '../presentation/web/components/Toast';
 
 expect.extend(toHaveNoViolations);
 
-
 function TestToastTrigger() {
   const { toast } = useToast();
   return (
@@ -23,31 +22,38 @@ describe('ErrorBoundary', () => {
     const { container } = render(
       <ErrorBoundary>
         <p>Test child</p>
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
     expect(screen.getByText('Test child')).toBeInTheDocument();
     expect(container).not.toHaveTextContent('Something went wrong');
   });
 
   it('renders error UI when error occurs', () => {
-    const ThrowError = () => { throw new Error('Test crash'); };
+    const ThrowError = () => {
+      throw new Error('Test crash');
+    };
     render(
       <ErrorBoundary>
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
-    expect(screen.getByText('Test crash')).toBeInTheDocument();
+    // @security: Raw error messages must NOT appear in the DOM (CWE-209)
+    // The component should display a safe generic message instead
+    expect(screen.getByText('An unexpected error occurred. Please try reloading the page.')).toBeInTheDocument();
+    expect(screen.queryByText('Test crash')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText('Reload page')).toBeInTheDocument();
   });
 
   it('has no accessibility violations in error state', async () => {
-    const ThrowError = () => { throw new Error('A11y test'); };
+    const ThrowError = () => {
+      throw new Error('A11y test');
+    };
     const { container } = render(
       <ErrorBoundary>
         <ThrowError />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -82,7 +88,7 @@ describe('Skeleton components', () => {
         <CardSkeleton />
         <ChartSkeleton />
         <TableSkeleton />
-      </div>
+      </div>,
     );
     const results = await axe(container);
     await expect(results).toHaveNoViolations();
@@ -94,7 +100,7 @@ describe('Toast system', () => {
     render(
       <ToastProvider>
         <p>Toast child</p>
-      </ToastProvider>
+      </ToastProvider>,
     );
     expect(screen.getByText('Toast child')).toBeInTheDocument();
   });
@@ -104,7 +110,7 @@ describe('Toast system', () => {
     render(
       <ToastProvider>
         <TestToastTrigger />
-      </ToastProvider>
+      </ToastProvider>,
     );
     await user.click(screen.getByRole('button', { name: /trigger toast/i }));
     expect(screen.getByText('Test notification')).toBeInTheDocument();
@@ -118,7 +124,7 @@ describe('Toast system', () => {
     render(
       <ToastProvider>
         <TestToastTrigger />
-      </ToastProvider>
+      </ToastProvider>,
     );
     await user.click(screen.getByRole('button', { name: /trigger toast/i }));
     const dismissBtn = screen.getByLabelText('Dismiss notification');
@@ -129,7 +135,7 @@ describe('Toast system', () => {
     const { container } = render(
       <ToastProvider>
         <TestToastTrigger />
-      </ToastProvider>
+      </ToastProvider>,
     );
     const results = await axe(container);
     await expect(results).toHaveNoViolations();

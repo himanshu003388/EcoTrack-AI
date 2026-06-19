@@ -57,9 +57,10 @@ export class ChallengeRepository implements IChallengeRepository {
       userId: row.user_id,
       challengeId: row.challenge_id,
       status: row.status as UserChallenge['status'],
-      progress: row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
+      progress:
+        row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
       startedAt: new Date(row.started_at),
-      completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+      completedAt: row.completed_at !== null && row.completed_at !== undefined ? new Date(row.completed_at) : undefined,
     };
   }
 
@@ -76,8 +77,9 @@ export class ChallengeRepository implements IChallengeRepository {
       if (cached) return cached;
     }
     const rows = await this.db.query<ChallengeRow>('SELECT * FROM challenges WHERE id = $1', [id]);
-    if (rows.length === 0) return null;
-    return this.mapRowToChallenge(rows[0]);
+    const firstRow = rows[0];
+    if (!firstRow) return null;
+    return this.mapRowToChallenge(firstRow);
   }
 
   async getUserChallenges(userId: number): Promise<JoinedUserChallenge[]> {
@@ -92,9 +94,10 @@ export class ChallengeRepository implements IChallengeRepository {
       userId: row.user_id,
       challengeId: row.challenge_id,
       status: row.status as UserChallenge['status'],
-      progress: row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
+      progress:
+        row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
       startedAt: new Date(row.started_at),
-      completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+      completedAt: row.completed_at !== null && row.completed_at !== undefined ? new Date(row.completed_at) : undefined,
       title: row.title,
       category: row.category,
       description: row.description,
@@ -105,12 +108,17 @@ export class ChallengeRepository implements IChallengeRepository {
   }
 
   async getUserChallenge(userId: number, challengeId: number): Promise<UserChallenge | null> {
-    const rows = await this.db.query<UserChallengeRow>('SELECT * FROM user_challenges WHERE user_id = $1 AND challenge_id = $2', [
-      userId,
-      challengeId,
-    ]);
-    if (rows.length === 0) return null;
-    return this.mapRowToUserChallenge(rows[0]);
+    const rows = await this.db.query<UserChallengeRow>(
+      'SELECT * FROM user_challenges WHERE user_id = $1 AND challenge_id = $2',
+      [userId, challengeId],
+    );
+    const firstRow = rows[0];
+    if (!firstRow) return null;
+    return this.mapRowToUserChallenge(firstRow);
+  }
+
+  invalidateCache(): void {
+    this.challengesCache = null;
   }
 
   async joinChallenge(userId: number, challengeId: number): Promise<UserChallenge> {
@@ -131,19 +139,17 @@ export class ChallengeRepository implements IChallengeRepository {
     userId: number,
     challengeId: number,
     progress: number,
-    status: UserChallenge['status']
+    status: UserChallenge['status'],
   ): Promise<UserChallenge> {
-    const isPostgres = this.db.getIsPostgres();
-    const completedAtSql = status === 'completed' 
-      ? (isPostgres ? 'CURRENT_TIMESTAMP' : "strftime('%Y-%m-%d %H:%M:%S', 'now')") 
-      : 'NULL';
+    const completedAt =
+      status === 'completed' ? (this.db.getIsPostgres() ? new Date() : new Date().toISOString()) : null;
 
     const sql = `
       UPDATE user_challenges
-      SET progress = $1, status = $2, completed_at = ${completedAtSql}
-      WHERE user_id = $3 AND challenge_id = $4
+      SET progress = $1, status = $2, completed_at = $3
+      WHERE user_id = $4 AND challenge_id = $5
     `;
-    await this.db.query(sql, [progress, status, userId, challengeId]);
+    await this.db.query(sql, [progress, status, completedAt, userId, challengeId]);
     const row = await this.getUserChallenge(userId, challengeId);
     if (!row) throw new Error('[ChallengeRepository] Failed to update challenge progress.');
     return row;

@@ -1,27 +1,18 @@
 import { IActivityRepository } from '../../domain/repositories/IActivityRepository';
 import { IGoalRepository } from '../../domain/repositories/IGoalRepository';
+import { TTLCache } from '../../infrastructure/cache/TTLCache';
 import { ForecastService, ForecastReport } from '../../services/ForecastService';
 
-const forecastCache = new Map<string, { data: ForecastReport; expiresAt: number }>();
-const CACHE_TTL_MS = 30_000; // 30 seconds
+const forecastCache = new TTLCache<ForecastReport>(30_000);
 
-/**
- * Clears the cached carbon emission forecast data.
- *
- * @param userId - Optional specific user ID to clear cache for. If omitted, clears all cache.
- */
 export function clearForecastCache(userId?: number): void {
-  if (userId !== undefined) {
-    forecastCache.delete(`forecast_${userId}`);
-  } else {
-    forecastCache.clear();
-  }
+  forecastCache.invalidate(userId !== undefined ? `forecast_${userId}` : undefined);
 }
 
 export class GetForecast {
   constructor(
     private activityRepository: IActivityRepository,
-    private goalRepository: IGoalRepository
+    private goalRepository: IGoalRepository,
   ) {}
 
   /**
@@ -33,16 +24,14 @@ export class GetForecast {
   async execute(userId: number): Promise<ForecastReport> {
     const cacheKey = `forecast_${userId}`;
     const cached = forecastCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data;
-    }
+    if (cached) return cached;
 
     const [actResult, currentGoal] = await Promise.all([
       this.activityRepository.findByUserId(userId, { limit: 1000 }),
-      this.goalRepository.findCurrentGoal(userId)
+      this.goalRepository.findCurrentGoal(userId),
     ]);
     const result = ForecastService.generate(actResult.activities, currentGoal);
-    forecastCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+    forecastCache.set(cacheKey, result);
     return result;
   }
 }

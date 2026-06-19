@@ -12,9 +12,9 @@ export interface UserRow {
   email: string;
   username: string;
   password_hash: string;
-  points: number;
-  level: User['level'];
-  streak: number;
+  points: number | null;
+  level: User['level'] | null;
+  streak: number | null;
   created_at: string | Date;
 }
 
@@ -27,38 +27,44 @@ export class UserRepository implements IUserRepository {
       email: row.email,
       username: row.username,
       passwordHash: row.password_hash,
-      points: row.points || 0,
-      level: row.level || 'Seedling',
-      streak: row.streak || 0,
+      points: row.points ?? 0,
+      level: row.level ?? 'Seedling',
+      streak: row.streak ?? 0,
       createdAt: new Date(row.created_at),
     };
   }
 
   async findByEmail(email: string): Promise<User | null> {
     const rows = await this.db.query<UserRow>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (rows.length === 0) return null;
-    return this.mapRowToUser(rows[0]);
+    const firstRow = rows[0];
+    if (!firstRow) return null;
+    return this.mapRowToUser(firstRow);
   }
 
   async findById(id: number): Promise<User | null> {
     const rows = await this.db.query<UserRow>('SELECT * FROM users WHERE id = $1', [id]);
-    if (rows.length === 0) return null;
-    return this.mapRowToUser(rows[0]);
+    const firstRow = rows[0];
+    if (!firstRow) return null;
+    return this.mapRowToUser(firstRow);
   }
 
   async create(email: string, username: string, passwordHash: string): Promise<User> {
     if (this.db.getIsPostgres()) {
       const rows = await this.db.query<UserRow>(
         'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING *',
-        [email.toLowerCase(), username, passwordHash]
+        [email.toLowerCase(), username, passwordHash],
       );
-      return this.mapRowToUser(rows[0]);
+      const firstRow = rows[0];
+      if (!firstRow) throw new Error('[UserRepository] Insert failed.');
+      return this.mapRowToUser(firstRow);
     } else {
       const res = await this.db.query<UserRow>(
-        'INSERT INTO users (email, username, password_hash, points, level, streak, created_at) VALUES ($1, $2, $3, 0, \'Seedling\', 0, CURRENT_TIMESTAMP)',
-        [email.toLowerCase(), username, passwordHash]
+        "INSERT INTO users (email, username, password_hash, points, level, streak, created_at) VALUES ($1, $2, $3, 0, 'Seedling', 0, CURRENT_TIMESTAMP)",
+        [email.toLowerCase(), username, passwordHash],
       );
-      const insertedId = res[0].id;
+      const firstResRow = res[0];
+      if (!firstResRow) throw new Error('[UserRepository] Insert failed.');
+      const insertedId = firstResRow.id;
       const user = await this.findById(insertedId);
       if (!user) throw new Error('[UserRepository] Created user could not be retrieved.');
       return user;

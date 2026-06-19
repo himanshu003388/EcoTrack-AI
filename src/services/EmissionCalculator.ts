@@ -2,13 +2,9 @@ import factorsRaw from '../config/emissionFactors.json';
 
 /** Emission factor entry for a specific activity subcategory. */
 export interface EmissionFactor {
-  /** Emission rate in kg CO2e per unit quantity. */
   value: number;
-  /** The unit of measurement for this factor (e.g., 'km', 'kWh', 'meal'). */
   unit: string;
-  /** Data source reference for this emission factor. */
   source: string;
-  /** Date when this factor was last updated (YYYY-MM-DD). */
   updatedDate: string;
 }
 
@@ -25,7 +21,7 @@ export interface EmissionFactorsSchema {
   shopping_waste: EmissionCategoryFactors;
 }
 
-const factors = factorsRaw as unknown as EmissionFactorsSchema;
+const factors = factorsRaw as EmissionFactorsSchema;
 
 /** kg CO2e emitted to charge a smartphone once (~8.3g). */
 const PHONE_CHARGE_FACTOR = 0.0083;
@@ -46,10 +42,10 @@ export class EmissionCalculator {
    * @returns Emissions in kg CO2e, rounded to 4 decimal places. Returns 0 for unknown factors.
    */
   static calculate(category: keyof EmissionFactorsSchema, subcategory: string, quantity: number): number {
+    if (!(category in factors)) return 0;
     const categoryFactors = factors[category];
-    if (!categoryFactors) return 0;
     const factor = categoryFactors[subcategory];
-    if (!factor) return 0;
+    if (factor === undefined) return 0;
     const emissions = quantity * factor.value;
     return Math.round(emissions * 10000) / 10000;
   }
@@ -62,7 +58,8 @@ export class EmissionCalculator {
    * @returns The EmissionFactor object, or `null` if the subcategory is unknown.
    */
   static getFactorInfo(category: keyof EmissionFactorsSchema, subcategory: string): EmissionFactor | null {
-    return factors[category]?.[subcategory] ?? null;
+    if (!(category in factors)) return null;
+    return factors[category][subcategory] ?? null;
   }
 
   /**
@@ -72,7 +69,8 @@ export class EmissionCalculator {
    * @returns An object mapping subcategory names to their EmissionFactor. Empty object if category is unknown.
    */
   static getCategoryFactors(category: keyof EmissionFactorsSchema): EmissionCategoryFactors {
-    return factors[category] ?? {};
+    if (!(category in factors)) return {};
+    return factors[category];
   }
 
   /**

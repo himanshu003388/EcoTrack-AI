@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
-import { authenticateToken } from '../presentation/api/middleware/auth';
+import { authenticateToken, sessionFallbackSecret } from '../presentation/api/middleware/auth';
 import { xssSanitizer } from '../presentation/api/middleware/sanitize';
 import { validateSchema } from '../presentation/api/middleware/validate';
 import { LogActivitySchema, ChatSchema } from '../presentation/api/middleware/schemas';
@@ -32,13 +32,14 @@ const mockRes = () => {
 };
 
 describe('Auth middleware', () => {
-  const mockReq = (headers: Record<string, string> = {}) => ({
-    headers,
-  }) as unknown as Request;
+  const mockReq = (headers: Record<string, string> = {}) =>
+    ({
+      headers,
+    }) as unknown as Request;
 
   const mockNext: NextFunction = vi.fn();
 
-  it('should always pass and set default user in req.user', () => {
+  it('should set stub default user in req.user when AUTH_REQUIRED is not set (dev/demo mode)', () => {
     const req = mockReq({});
     const res = mockRes();
     authenticateToken(req, res, mockNext);
@@ -50,17 +51,44 @@ describe('Auth middleware', () => {
     expect(mockNext).toHaveBeenCalled();
   });
 
-  it('should pass and set stub user when authorization is dummy-token', () => {
+  it('should return 401 when no token is provided and AUTH_REQUIRED is true', () => {
+    const oldAuthRequired = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    const req = mockReq({});
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+    authenticateToken(req, res, mockNextFn);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Authentication required.' });
+    expect(mockNextFn).not.toHaveBeenCalled();
+    if (oldAuthRequired !== undefined) process.env.AUTH_REQUIRED = oldAuthRequired;
+    else delete process.env.AUTH_REQUIRED;
+  });
+
+  it('should accept valid JWT even when AUTH_REQUIRED is true', () => {
+    const oldAuthRequired = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    const secret = process.env.JWT_SECRET || 'fallback-secret-at-least-32-chars-long!!';
+    const payload = { id: 7, email: 'secured@example.com', username: 'secured_user' };
+    const token = jwt.sign(payload, secret);
+    const req = mockReq({ authorization: `Bearer ${token}` });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+    authenticateToken(req, res, mockNextFn);
+    expect((req as any).user).toEqual({ id: 7, email: 'secured@example.com', username: 'secured_user' });
+    expect(mockNextFn).toHaveBeenCalled();
+    if (oldAuthRequired !== undefined) process.env.AUTH_REQUIRED = oldAuthRequired;
+    else delete process.env.AUTH_REQUIRED;
+  });
+
+  it('should reject with 403 when authorization is dummy-token (bypass removed)', () => {
     const req = mockReq({ authorization: 'Bearer dummy-token' });
     const res = mockRes();
     const mockNextFn = vi.fn();
     authenticateToken(req, res, mockNextFn);
-    expect((req as any).user).toEqual({
-      id: 1,
-      email: 'user@ecotrack.ai',
-      username: 'EcoTrack User',
-    });
-    expect(mockNextFn).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid or expired authentication token.' });
+    expect(mockNextFn).not.toHaveBeenCalled();
   });
 
   it('should verify and set user from decoded JWT token', () => {
@@ -93,7 +121,7 @@ describe('Auth middleware', () => {
     const originalSecret = process.env.JWT_SECRET;
     delete process.env.JWT_SECRET;
 
-    const fallbackSecret = 'fallback-secret-at-least-32-chars-long!!';
+    const fallbackSecret = sessionFallbackSecret || 'fallback-secret-at-least-32-chars-long!!';
     const payload = { id: 99, email: 'fallback@example.com', username: 'fallback_user' };
     const token = jwt.sign(payload, fallbackSecret);
     const req = mockReq({ authorization: `Bearer ${token}` });
@@ -116,11 +144,12 @@ describe('Auth middleware', () => {
 });
 
 describe('Sanitize middleware', () => {
-  const mockReq = (body: any = {}) => ({
-    body: JSON.parse(JSON.stringify(body)),
-  }) as unknown as Request;
+  const mockReq = (body: any = {}) =>
+    ({
+      body: JSON.parse(JSON.stringify(body)),
+    }) as unknown as Request;
 
-  const mockRes = () => ({} as Response);
+  const mockRes = () => ({}) as Response;
   const mockNext: NextFunction = vi.fn();
 
   it('should strip script tags from string fields', () => {
@@ -242,7 +271,8 @@ describe('Validate middleware', () => {
   it('should pass valid activity data', async () => {
     const req = {
       body: { category: 'transport', subcategory: 'car_petrol', quantity: 10, unit: 'km' },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     await validateSchema(activitySchema)(req, res, mockNext);
@@ -252,7 +282,8 @@ describe('Validate middleware', () => {
   it('should reject activity with invalid category', async () => {
     const req = {
       body: { category: 'teleport', subcategory: 'car_petrol', quantity: 10, unit: 'km' },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     await validateSchema(activitySchema)(req, res, mockNext);
@@ -262,7 +293,8 @@ describe('Validate middleware', () => {
   it('should reject activity with negative quantity', async () => {
     const req = {
       body: { category: 'transport', subcategory: 'car_petrol', quantity: -5, unit: 'km' },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     await validateSchema(activitySchema)(req, res, mockNext);
@@ -272,7 +304,8 @@ describe('Validate middleware', () => {
   it('should reject activity with zero quantity', async () => {
     const req = {
       body: { category: 'transport', subcategory: 'car_petrol', quantity: 0, unit: 'km' },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     await validateSchema(activitySchema)(req, res, mockNext);
@@ -303,7 +336,8 @@ describe('LogActivitySchema quantity cap', () => {
   it('should reject quantity over 100,000', async () => {
     const req = {
       body: { category: 'transport', subcategory: 'car_petrol', quantity: 200000, unit: 'km' },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     const mockNextFn: NextFunction = vi.fn();
@@ -314,7 +348,8 @@ describe('LogActivitySchema quantity cap', () => {
   it('should accept quantity at exactly 100,000', async () => {
     const req = {
       body: { category: 'transport', subcategory: 'car_petrol', quantity: 100000, unit: 'km' },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     const mockNextFn: NextFunction = vi.fn();
@@ -327,7 +362,8 @@ describe('ChatSchema message length cap', () => {
   it('should reject message over 500 characters', async () => {
     const req = {
       body: { message: 'a'.repeat(501) },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     const mockNextFn: NextFunction = vi.fn();
@@ -338,11 +374,63 @@ describe('ChatSchema message length cap', () => {
   it('should accept message at exactly 500 characters', async () => {
     const req = {
       body: { message: 'a'.repeat(500) },
-      query: {}, params: {},
+      query: {},
+      params: {},
     } as any;
     const res = mockRes();
     const mockNextFn: NextFunction = vi.fn();
     await validateSchema(ChatSchema)(req, res, mockNextFn);
     expect(mockNextFn).toHaveBeenCalled();
+  });
+});
+
+// Additional sanitizer security tests for hardened vectors
+describe('Sanitize middleware — hardened vectors', () => {
+  const mockReqBody = (body: any) =>
+    ({
+      body: JSON.parse(JSON.stringify(body)),
+      query: {},
+      params: {},
+    }) as unknown as Request;
+  const mockResponse = () => ({}) as Response;
+  const mockNextFn: NextFunction = vi.fn();
+
+  it('should strip SVG onload event handler', () => {
+    const req = mockReqBody({ payload: '<svg onload=alert(1)>text</svg>' });
+    xssSanitizer(req, mockResponse(), mockNextFn);
+    expect(req.body.payload).not.toContain('onload');
+    expect(req.body.payload).not.toContain('<svg');
+  });
+
+  it('should strip null bytes from string fields', () => {
+    const req = mockReqBody({ filename: 'safe.txt\x00.exe' });
+    xssSanitizer(req, mockResponse(), mockNextFn);
+    expect(req.body.filename).not.toContain('\x00');
+    expect(req.body.filename).toBe('safe.txt.exe');
+  });
+
+  it('should decode HTML entities and then sanitize encoded script tag', () => {
+    const req = mockReqBody({ message: '&lt;script&gt;alert(1)&lt;/script&gt;' });
+    xssSanitizer(req, mockResponse(), mockNextFn);
+    expect(req.body.message).not.toContain('script');
+    expect(req.body.message).not.toContain('alert');
+  });
+
+  it('should remove prototype pollution key __proto__', () => {
+    const req = { body: Object.create(null), query: {}, params: {} } as unknown as Request;
+    // Simulate object with __proto__ key (use defineProperty to avoid actual prototype pollution)
+    Object.defineProperty(req.body, '__proto__', { value: { injected: true }, enumerable: true });
+    req.body['safe'] = 'value';
+    xssSanitizer(req, mockResponse(), mockNextFn);
+    expect(req.body).not.toHaveProperty('injected');
+    expect(req.body['safe']).toBe('value');
+  });
+
+  it('should remove constructor and prototype pollution keys from body', () => {
+    const req = mockReqBody({ constructor: 'evil', prototype: 'bad', safe: 'ok' });
+    xssSanitizer(req, mockResponse(), mockNextFn);
+    expect(req.body).not.toHaveProperty('constructor');
+    expect(req.body).not.toHaveProperty('prototype');
+    expect(req.body.safe).toBe('ok');
   });
 });

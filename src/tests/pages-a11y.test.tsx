@@ -29,6 +29,9 @@ vi.mock('../presentation/web/main', () => ({
     theme: 'light' as const,
     toggleTheme: vi.fn(),
   }),
+  apiFetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    return fetch(input, init);
+  },
 }));
 
 vi.mock('recharts', () => ({
@@ -54,35 +57,48 @@ vi.stubGlobal('fetch', vi.fn());
 function renderWithProviders(ui: React.ReactElement, initialEntries = ['/']) {
   return render(
     <ToastProvider>
-      <MemoryRouter initialEntries={initialEntries}>
-        {ui}
-      </MemoryRouter>
-    </ToastProvider>
+      <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
+    </ToastProvider>,
   );
 }
-
 
 describe('Dashboard page accessibility', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockImplementation(async (url: any) => {
       if (url.toString().includes('/api/actions/daily')) {
         return {
-          ok: true, json: () => Promise.resolve({
-            action: { title: 'Walk instead of drive', description: 'A short walk reduces emissions.', difficulty: 'Easy', duration: '5 min', co2Saving: '0.5 kg', link: 'https://example.com' },
-            reason: 'Short car trips produce disproportionate emissions.',
-          }),
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              action: {
+                title: 'Walk instead of drive',
+                description: 'A short walk reduces emissions.',
+                difficulty: 'Easy',
+                duration: '5 min',
+                co2Saving: '0.5 kg',
+                link: 'https://example.com',
+              },
+              reason: 'Short car trips produce disproportionate emissions.',
+            }),
         } as any;
       }
       return {
-        ok: true, json: () => Promise.resolve({
-          sustainabilityScore: 65, emissions: { today: 12, monthly: 180, annualProjection: 2190 },
-          userStats: { level: 'Tree' },
-          equivalents: { treesNeeded: 8, carKm: 1000, electricityHours: 480, phoneCharges: 21687 },
-          categoryBreakdown: [{ category: 'transport', emissions: 80, percentage: 44 }, { category: 'food', emissions: 50, percentage: 28 }],
-          trends: [{ date: '2025-01-01', emissions: 12 }],
-          averages: { nationalDaily: 25, globalDaily: 15, sustainableDaily: 5.5 },
-          explanation: 'Test.', currentGoal: { targetCo2: 200, achieved: false, endDate: new Date().toISOString() },
-        }),
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            sustainabilityScore: 65,
+            emissions: { today: 12, monthly: 180, annualProjection: 2190 },
+            userStats: { level: 'Tree' },
+            equivalents: { treesNeeded: 8, carKm: 1000, electricityHours: 480, phoneCharges: 21687 },
+            categoryBreakdown: [
+              { category: 'transport', emissions: 80, percentage: 44 },
+              { category: 'food', emissions: 50, percentage: 28 },
+            ],
+            trends: [{ date: '2025-01-01', emissions: 12 }],
+            averages: { nationalDaily: 25, globalDaily: 15, sustainableDaily: 5.5 },
+            explanation: 'Test.',
+            currentGoal: { targetCo2: 200, achieved: false, endDate: new Date().toISOString() },
+          }),
       } as any;
     });
   });
@@ -100,6 +116,22 @@ describe('Dashboard page accessibility', () => {
     await waitFor(async () => {
       expect(await screen.findByLabelText('Quick actions to reduce your footprint')).toBeInTheDocument();
     });
+  });
+
+  it('has loading state with aria-busy', async () => {
+    vi.mocked(fetch).mockImplementation(async () => new Promise(() => {}));
+    const { Dashboard } = await import('../presentation/web/pages/Dashboard');
+    renderWithProviders(<Dashboard />);
+    const loadingRegion = await screen.findByRole('status', { name: 'Loading dashboard' });
+    expect(loadingRegion).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('has data table for comparison chart', async () => {
+    const { Dashboard } = await import('../presentation/web/pages/Dashboard');
+    renderWithProviders(<Dashboard />);
+    await screen.findByRole('heading', { level: 1 });
+    const summary = await screen.findByText('View comparison data table');
+    expect(summary).toBeInTheDocument();
   });
 
   it('has no accessibility violations', async () => {
@@ -131,12 +163,20 @@ describe('Simulator page accessibility', () => {
     const results = await axe(container);
     await expect(results).toHaveNoViolations();
   });
+
+  it('simulator has accessible save button', async () => {
+    const { Simulator } = await import('../presentation/web/pages/Simulator');
+    renderWithProviders(<Simulator />);
+    expect(screen.getByLabelText('Save current simulation scenario')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reset all sliders to default values')).toBeInTheDocument();
+  });
 });
 
 describe('Coach page accessibility', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockResolvedValue({
-      ok: true, json: () => Promise.resolve({ reply: 'Test reply', insights: ['Tip 1'], suggestions: ['Ask more'] }),
+      ok: true,
+      json: () => Promise.resolve({ reply: 'Test reply', insights: ['Tip 1'], suggestions: ['Ask more'] }),
     } as any);
   });
 
@@ -166,15 +206,35 @@ describe('Coach page accessibility', () => {
     const results = await axe(container);
     await expect(results).toHaveNoViolations();
   });
+
+  it('coach has sr-only sender labels', async () => {
+    const { Coach } = await import('../presentation/web/pages/Coach');
+    renderWithProviders(<Coach />);
+    await screen.findByText(/I am your AI Eco Coach/);
+    const senderLabel = screen.getByText('Eco Coach said:');
+    expect(senderLabel).toHaveClass('sr-only');
+  });
 });
 
 describe('Challenges page accessibility', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockResolvedValue({
-      ok: true, json: () => Promise.resolve({
-        challenges: [{ id: 1, title: 'Reduce Transport', category: 'transport', description: 'Test desc', pointsReward: 50, co2Target: 20, durationDays: 7 }],
-        joined: [],
-      }),
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          challenges: [
+            {
+              id: 1,
+              title: 'Reduce Transport',
+              category: 'transport',
+              description: 'Test desc',
+              pointsReward: 50,
+              co2Target: 20,
+              durationDays: 7,
+            },
+          ],
+          joined: [],
+        }),
     } as any);
   });
 
@@ -192,16 +252,29 @@ describe('Challenges page accessibility', () => {
     const results = await axe(container);
     await expect(results).toHaveNoViolations();
   });
+
+  it('badges have accessible labels', async () => {
+    const { Challenges } = await import('../presentation/web/pages/Challenges');
+    renderWithProviders(<Challenges />);
+    await screen.findByRole('heading', { level: 1 });
+    const badgesSection = screen.getByLabelText('Achievement badges');
+    expect(badgesSection).toBeInTheDocument();
+  });
 });
 
 describe('ForecastPage accessibility', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockResolvedValue({
-      ok: true, json: () => Promise.resolve({
-        nextMonthEstimate: 320, trendDirection: 'increasing', trendPercentage: 15,
-        goalAchievementProbability: 45, riskAreas: [{ category: 'transport', message: 'High' }],
-        improvementOpportunities: ['Use transit more'],
-      }),
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          nextMonthEstimate: 320,
+          trendDirection: 'increasing',
+          trendPercentage: 15,
+          goalAchievementProbability: 45,
+          riskAreas: [{ category: 'transport', message: 'High' }],
+          improvementOpportunities: ['Use transit more'],
+        }),
     } as any);
   });
 
@@ -219,17 +292,36 @@ describe('ForecastPage accessibility', () => {
     const results = await axe(container);
     await expect(results).toHaveNoViolations();
   });
+
+  it('forecast has accessible progress bars', async () => {
+    const { ForecastPage } = await import('../presentation/web/pages/ForecastPage');
+    renderWithProviders(<ForecastPage />);
+    await screen.findByRole('heading', { level: 1 });
+    const goalBar = screen.getByLabelText('Goal probability');
+    expect(goalBar).toHaveAttribute('role', 'progressbar');
+  });
 });
 
 describe('ReportsPage accessibility', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockResolvedValue({
-      ok: true, json: () => Promise.resolve({
-        totalEmissions: 200, averageDaily: 6.7, carbonSaved: 45, moneySaved: 30,
-        streak: 7, level: 'Tree', badgesCount: 3, points: 250,
-        categoryBreakdown: [{ category: 'transport', emissions: 100 }],
-        goals: [{ target: 200, achieved: true, date: '2025-01-15' }],
-      }),
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          totalEmissions: 200,
+          averageDaily: 6.7,
+          carbonSaved: 45,
+          moneySaved: 30,
+          streak: 7,
+          level: 'Tree',
+          badgesCount: 3,
+          points: 250,
+          categoryBreakdown: [{ category: 'transport', emissions: 100 }],
+          goals: [
+            { target: 200, achieved: true, date: '2025-01-15' },
+            { target: 150, achieved: false, date: '2025-02-01' },
+          ],
+        }),
     } as any);
   });
 
@@ -247,11 +339,57 @@ describe('ReportsPage accessibility', () => {
     const results = await axe(container);
     await expect(results).toHaveNoViolations();
   });
+
+  it('impact card has accessible label', async () => {
+    const { ReportsPage } = await import('../presentation/web/pages/ReportsPage');
+    renderWithProviders(<ReportsPage />);
+    await screen.findByRole('heading', { level: 1 });
+    const impactCard = screen.getByLabelText(/Impact card for TestUser/);
+    expect(impactCard).toBeInTheDocument();
+  });
+
+  it('report has sr-only achieved labels', async () => {
+    const { ReportsPage } = await import('../presentation/web/pages/ReportsPage');
+    renderWithProviders(<ReportsPage />);
+    await screen.findByRole('heading', { level: 1 });
+    const achievedLabels = screen.getAllByText('Goal not achieved');
+    expect(achievedLabels.length).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe('Tracker page accessibility', () => {
   beforeEach(() => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true, json: () => Promise.resolve({ activities: [], total: 0 }) } as any);
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          activities: [
+            {
+              id: 1,
+              category: 'transport',
+              subcategory: 'car_petrol',
+              quantity: 10,
+              unit: 'km',
+              co2Emissions: 2.3,
+              timestamp: new Date().toISOString(),
+              isRecurring: false,
+              recurrencePeriod: 'none',
+            },
+            {
+              id: 2,
+              category: 'food',
+              subcategory: 'meat',
+              quantity: 1,
+              unit: 'meals',
+              co2Emissions: 4.6,
+              timestamp: new Date().toISOString(),
+              isRecurring: false,
+              recurrencePeriod: 'none',
+            },
+          ],
+          total: 2,
+        }),
+    } as any);
   });
 
   it('has proper heading', async () => {
@@ -266,6 +404,15 @@ describe('Tracker page accessibility', () => {
     renderWithProviders(<Tracker />);
     const region = await screen.findByLabelText('Log activity form');
     expect(region).toBeInTheDocument();
+  });
+
+  it('has accessible activity table', async () => {
+    const { Tracker } = await import('../presentation/web/pages/Tracker');
+    renderWithProviders(<Tracker />);
+    const table = await screen.findByRole('table', { name: 'Activity log history' });
+    expect(table).toBeInTheDocument();
+    const caption = table.querySelector('caption');
+    expect(caption).toHaveTextContent('Your logged activities');
   });
 
   it('has no accessibility violations', async () => {

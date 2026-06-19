@@ -5,7 +5,6 @@ import { ActivityRepository } from '../infrastructure/database/ActivityRepositor
 import { ChallengeRepository } from '../infrastructure/database/ChallengeRepository';
 import { GoalRepository } from '../infrastructure/database/GoalRepository';
 
-
 describe('DatabaseConnection', () => {
   it('should initialize with default SQLite path', () => {
     const db = new DatabaseConnection();
@@ -41,9 +40,9 @@ describe('DatabaseConnection', () => {
     const bgCount = await newDb.query('SELECT COUNT(*) as count FROM badges');
     const userCount = await newDb.query('SELECT COUNT(*) as count FROM users');
 
-    expect(Number(chCount[0].count)).toBe(4);
-    expect(Number(bgCount[0].count)).toBe(5);
-    expect(Number(userCount[0].count)).toBe(1);
+    expect(Number(chCount[0]!.count)).toBe(4);
+    expect(Number(bgCount[0]!.count)).toBe(5);
+    expect(Number(userCount[0]!.count)).toBe(1);
 
     await newDb.close();
   });
@@ -124,7 +123,7 @@ describe('Schema SQL', () => {
     const fs = await import('fs');
     const path = await import('path');
     const schemaPath = path.resolve(__dirname, '../infrastructure/persistence/schema.sql');
-    const backupPath = schemaPath + '.bak';
+    const backupPath = `${schemaPath}.bak`;
 
     let hasBackup = false;
     if (fs.existsSync(schemaPath)) {
@@ -156,8 +155,11 @@ describe('Schema SQL', () => {
 
     await (dbMockPG as any).seedChallengesAndBadges();
 
+    // @security: Seed user now uses parameterized queries (not string interpolation)
+    // to protect against CWE-259 hardcoded password. Verify the INSERT uses $1..$4 params.
     expect(querySpy).toHaveBeenCalledWith(
-      expect.stringContaining("INSERT INTO users")
+      expect.stringContaining('INSERT INTO users'),
+      expect.arrayContaining(['user@ecotrack.ai', 'EcoTrack User']),
     );
 
     querySpy.mockRestore();
@@ -202,7 +204,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
       const repo = new UserRepository(mockDbConnection);
       await expect(repo.create('fail@test.com', 'fail', 'hash')).rejects.toThrow(
-        '[UserRepository] Created user could not be retrieved.'
+        '[UserRepository] Created user could not be retrieved.',
       );
     });
 
@@ -226,15 +228,18 @@ describe('Repositories Integration & Postgres Paths', () => {
       const user = await repo.create('postgres@test.com', 'pg_user', 'hash');
       expect(user.id).toBe(10);
       expect(user.email).toBe('postgres@test.com');
-      expect(mockDbConnection.query).toHaveBeenCalledWith(
-        expect.stringContaining('RETURNING *'),
-        ['postgres@test.com', 'pg_user', 'hash']
-      );
+      expect(mockDbConnection.query).toHaveBeenCalledWith(expect.stringContaining('RETURNING *'), [
+        'postgres@test.com',
+        'pg_user',
+        'hash',
+      ]);
     });
 
     it('findByEmail returns user when found', async () => {
       const repo = new UserRepository(db);
-      await db.query("INSERT OR IGNORE INTO users (id, email, username, password_hash) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password')");
+      await db.query(
+        "INSERT OR IGNORE INTO users (id, email, username, password_hash) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password')",
+      );
       const user = await repo.findByEmail('user@ecotrack.ai');
       expect(user).not.toBeNull();
       expect(user!.email).toBe('user@ecotrack.ai');
@@ -286,10 +291,7 @@ describe('Repositories Integration & Postgres Paths', () => {
         recurrencePeriod: 'none',
       });
       expect(act.id).toBe(42);
-      expect(mockDbConnection.query).toHaveBeenCalledWith(
-        expect.stringContaining('RETURNING *'),
-        expect.any(Array)
-      );
+      expect(mockDbConnection.query).toHaveBeenCalledWith(expect.stringContaining('RETURNING *'), expect.any(Array));
     });
 
     it('create throws in SQLite if created activity cannot be retrieved', async () => {
@@ -303,21 +305,25 @@ describe('Repositories Integration & Postgres Paths', () => {
         }),
       } as any;
       const repo = new ActivityRepository(mockDbConnection);
-      await expect(repo.create({
-        userId: 1,
-        category: 'transport',
-        subcategory: 'car_petrol',
-        quantity: 15,
-        unit: 'km',
-        co2Emissions: 2.7,
-        timestamp: new Date(),
-        isRecurring: false,
-        recurrencePeriod: 'none',
-      })).rejects.toThrow('[ActivityRepository] Created activity could not be retrieved.');
+      await expect(
+        repo.create({
+          userId: 1,
+          category: 'transport',
+          subcategory: 'car_petrol',
+          quantity: 15,
+          unit: 'km',
+          co2Emissions: 2.7,
+          timestamp: new Date(),
+          isRecurring: false,
+          recurrencePeriod: 'none',
+        }),
+      ).rejects.toThrow('[ActivityRepository] Created activity could not be retrieved.');
     });
 
     it('findByUserId works with various filters to cover branches', async () => {
-      await db.query("INSERT OR IGNORE INTO users (id, email, username, password_hash) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password')");
+      await db.query(
+        "INSERT OR IGNORE INTO users (id, email, username, password_hash) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password')",
+      );
 
       const repo = new ActivityRepository(db);
       await repo.create({
@@ -343,8 +349,8 @@ describe('Repositories Integration & Postgres Paths', () => {
       });
 
       expect(res.total).toBeGreaterThanOrEqual(1);
-      expect(res.activities[0].category).toBe('energy');
-      expect(res.activities[0].subcategory).toBe('solar_power');
+      expect(res.activities[0]!.category).toBe('energy');
+      expect(res.activities[0]!.subcategory).toBe('solar_power');
     });
 
     it('delete in Postgres mode', async () => {
@@ -355,10 +361,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       const repo = new ActivityRepository(mockDbConnection);
       const deleted = await repo.delete(5, 1);
       expect(deleted).toBe(true);
-      expect(mockDbConnection.query).toHaveBeenCalledWith(
-        expect.stringContaining('RETURNING id'),
-        [5, 1]
-      );
+      expect(mockDbConnection.query).toHaveBeenCalledWith(expect.stringContaining('RETURNING id'), [5, 1]);
     });
 
     it('delete returns false if not found in SQLite mode', async () => {
@@ -381,9 +384,39 @@ describe('Repositories Integration & Postgres Paths', () => {
       const today = new Date();
       const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
-      await repo.create({ userId: 99, category: 'food', subcategory: 'vegan', quantity: 1, unit: 'meals', co2Emissions: 0.5, timestamp: today, isRecurring: false, recurrencePeriod: 'none' });
-      await repo.create({ userId: 99, category: 'food', subcategory: 'vegan', quantity: 1, unit: 'meals', co2Emissions: 0.5, timestamp: today, isRecurring: false, recurrencePeriod: 'none' });
-      await repo.create({ userId: 99, category: 'food', subcategory: 'vegan', quantity: 1, unit: 'meals', co2Emissions: 0.5, timestamp: yesterday, isRecurring: false, recurrencePeriod: 'none' });
+      await repo.create({
+        userId: 99,
+        category: 'food',
+        subcategory: 'vegan',
+        quantity: 1,
+        unit: 'meals',
+        co2Emissions: 0.5,
+        timestamp: today,
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      });
+      await repo.create({
+        userId: 99,
+        category: 'food',
+        subcategory: 'vegan',
+        quantity: 1,
+        unit: 'meals',
+        co2Emissions: 0.5,
+        timestamp: today,
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      });
+      await repo.create({
+        userId: 99,
+        category: 'food',
+        subcategory: 'vegan',
+        quantity: 1,
+        unit: 'meals',
+        co2Emissions: 0.5,
+        timestamp: yesterday,
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      });
 
       const info = await repo.getStreakInfo(99);
       expect(info.currentStreak).toBe(2);
@@ -395,7 +428,17 @@ describe('Repositories Integration & Postgres Paths', () => {
       await db.query('DELETE FROM activities WHERE user_id = 99');
 
       const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-      await repo.create({ userId: 99, category: 'food', subcategory: 'vegan', quantity: 1, unit: 'meals', co2Emissions: 0.5, timestamp: threeDaysAgo, isRecurring: false, recurrencePeriod: 'none' });
+      await repo.create({
+        userId: 99,
+        category: 'food',
+        subcategory: 'vegan',
+        quantity: 1,
+        unit: 'meals',
+        co2Emissions: 0.5,
+        timestamp: threeDaysAgo,
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      });
 
       const info = await repo.getStreakInfo(99);
       expect(info.currentStreak).toBe(0);
@@ -409,8 +452,28 @@ describe('Repositories Integration & Postgres Paths', () => {
       const today = new Date();
       const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
 
-      await repo.create({ userId: 99, category: 'food', subcategory: 'vegan', quantity: 1, unit: 'meals', co2Emissions: 0.5, timestamp: today, isRecurring: false, recurrencePeriod: 'none' });
-      await repo.create({ userId: 99, category: 'food', subcategory: 'vegan', quantity: 1, unit: 'meals', co2Emissions: 0.5, timestamp: twoDaysAgo, isRecurring: false, recurrencePeriod: 'none' });
+      await repo.create({
+        userId: 99,
+        category: 'food',
+        subcategory: 'vegan',
+        quantity: 1,
+        unit: 'meals',
+        co2Emissions: 0.5,
+        timestamp: today,
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      });
+      await repo.create({
+        userId: 99,
+        category: 'food',
+        subcategory: 'vegan',
+        quantity: 1,
+        unit: 'meals',
+        co2Emissions: 0.5,
+        timestamp: twoDaysAgo,
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      });
 
       const info = await repo.getStreakInfo(99);
       expect(info.currentStreak).toBe(1);
@@ -427,26 +490,40 @@ describe('Repositories Integration & Postgres Paths', () => {
     it('updateChallengeProgress completed path uses correct timestamps for PG vs SQLite', async () => {
       const mockDbConnectionPG = {
         getIsPostgres: () => true,
-        query: vi.fn().mockResolvedValue([{ user_id: 1, challenge_id: 1, status: 'completed', progress: 5, started_at: new Date().toISOString() }]),
+        query: vi
+          .fn()
+          .mockResolvedValue([
+            { user_id: 1, challenge_id: 1, status: 'completed', progress: 5, started_at: new Date().toISOString() },
+          ]),
         getUserChallenge: vi.fn(),
       } as any;
       const repoPG = new ChallengeRepository(mockDbConnectionPG);
       await repoPG.updateChallengeProgress(1, 1, 5, 'completed');
-      expect(mockDbConnectionPG.query).toHaveBeenCalledWith(
-        expect.stringContaining('CURRENT_TIMESTAMP'),
-        [5, 'completed', 1, 1]
-      );
+      expect(mockDbConnectionPG.query).toHaveBeenCalledWith(expect.stringContaining('completed_at = $3'), [
+        5,
+        'completed',
+        expect.any(Date),
+        1,
+        1,
+      ]);
 
       const mockDbConnectionLite = {
         getIsPostgres: () => false,
-        query: vi.fn().mockResolvedValue([{ user_id: 1, challenge_id: 1, status: 'active', progress: 3, started_at: new Date().toISOString() }]),
+        query: vi
+          .fn()
+          .mockResolvedValue([
+            { user_id: 1, challenge_id: 1, status: 'active', progress: 3, started_at: new Date().toISOString() },
+          ]),
       } as any;
       const repoLite = new ChallengeRepository(mockDbConnectionLite);
       await repoLite.updateChallengeProgress(1, 1, 3, 'active');
-      expect(mockDbConnectionLite.query).toHaveBeenCalledWith(
-        expect.stringContaining('NULL'),
-        [3, 'active', 1, 1]
-      );
+      expect(mockDbConnectionLite.query).toHaveBeenCalledWith(expect.stringContaining('completed_at = $3'), [
+        3,
+        'active',
+        null,
+        1,
+        1,
+      ]);
     });
 
     it('joinChallenge returns existing challenge if already joined', async () => {
@@ -475,14 +552,16 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
       const repo = new ChallengeRepository(mockDbConnection);
       vi.spyOn(repo, 'getUserChallenge').mockResolvedValue(null);
-      await expect(repo.updateChallengeProgress(1, 1, 5, 'active')).rejects.toThrow('[ChallengeRepository] Failed to update challenge progress.');
+      await expect(repo.updateChallengeProgress(1, 1, 5, 'active')).rejects.toThrow(
+        '[ChallengeRepository] Failed to update challenge progress.',
+      );
     });
 
     it('findById resolves from DB if not in cache', async () => {
       const repo = new ChallengeRepository(db);
       const allChallenges = await db.query<{ id: number }>('SELECT id FROM challenges LIMIT 1');
       expect(allChallenges.length).toBeGreaterThan(0);
-      const validId = allChallenges[0].id;
+      const validId = allChallenges[0]!.id;
 
       (repo as any).challengesCache = null;
       const ch = await repo.findById(validId);
@@ -514,10 +593,7 @@ describe('Repositories Integration & Postgres Paths', () => {
         achieved: false,
       });
       expect(goal.id).toBe(3);
-      expect(mockDbConnection.query).toHaveBeenCalledWith(
-        expect.stringContaining('RETURNING *'),
-        expect.any(Array)
-      );
+      expect(mockDbConnection.query).toHaveBeenCalledWith(expect.stringContaining('RETURNING *'), expect.any(Array));
     });
 
     it('create in SQLite mode throws if not found', async () => {
@@ -531,13 +607,15 @@ describe('Repositories Integration & Postgres Paths', () => {
         }),
       } as any;
       const repo = new GoalRepository(mockDbConnection);
-      await expect(repo.create({
-        userId: 1,
-        targetCo2: 150.0,
-        startDate: new Date(),
-        endDate: new Date(),
-        achieved: false,
-      })).rejects.toThrow('[GoalRepository] Created goal could not be retrieved.');
+      await expect(
+        repo.create({
+          userId: 1,
+          targetCo2: 150.0,
+          startDate: new Date(),
+          endDate: new Date(),
+          achieved: false,
+        }),
+      ).rejects.toThrow('[GoalRepository] Created goal could not be retrieved.');
     });
 
     it('updateGoalAchievement in Postgres vs SQLite modes', async () => {
@@ -547,10 +625,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
       const repoPG = new GoalRepository(mockDbConnectionPG);
       await repoPG.updateGoalAchievement(1, true);
-      expect(mockDbConnectionPG.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE goals'),
-        [true, 1]
-      );
+      expect(mockDbConnectionPG.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE goals'), [true, 1]);
 
       const mockDbConnectionLite = {
         getIsPostgres: () => false,
@@ -558,10 +633,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
       const repoLite = new GoalRepository(mockDbConnectionLite);
       await repoLite.updateGoalAchievement(1, true);
-      expect(mockDbConnectionLite.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE goals'),
-        [1, 1]
-      );
+      expect(mockDbConnectionLite.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE goals'), [1, 1]);
     });
 
     it('findCurrentGoal returns null when no goals', async () => {
@@ -608,10 +680,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
       const repoLite = new GoalRepository(mockDbConnectionLite);
       await repoLite.updateGoalAchievement(1, false);
-      expect(mockDbConnectionLite.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE goals'),
-        [0, 1]
-      );
+      expect(mockDbConnectionLite.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE goals'), [0, 1]);
     });
   });
 
@@ -669,7 +738,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       await repo.getDailyEmissionsSummary(1, new Date(), new Date());
       expect(mockDbConnection.query).toHaveBeenCalledWith(
         expect.stringContaining("TO_CHAR(timestamp, 'YYYY-MM-DD')"),
-        expect.any(Array)
+        expect.any(Array),
       );
     });
 
@@ -696,10 +765,10 @@ describe('Repositories Integration & Postgres Paths', () => {
 
       const repoStr = new ChallengeRepository(mockDbConnectionStr);
       const joinedStr = await repoStr.getUserChallenges(1);
-      expect(joinedStr[0].progress).toBe(3.5);
-      expect(joinedStr[0].pointsReward).toBe(100);
-      expect(joinedStr[0].co2Target).toBe(15);
-      expect(joinedStr[0].durationDays).toBe(7);
+      expect(joinedStr[0]!.progress).toBe(3.5);
+      expect(joinedStr[0]!.pointsReward).toBe(100);
+      expect(joinedStr[0]!.co2Target).toBe(15);
+      expect(joinedStr[0]!.durationDays).toBe(7);
 
       const mockJoinedRowNum = {
         user_id: 1,
@@ -723,8 +792,8 @@ describe('Repositories Integration & Postgres Paths', () => {
 
       const repoNum = new ChallengeRepository(mockDbConnectionNum);
       const joinedNum = await repoNum.getUserChallenges(1);
-      expect(joinedNum[0].progress).toBe(0);
-      expect(joinedNum[0].completedAt).toBeDefined();
+      expect(joinedNum[0]!.progress).toBe(0);
+      expect(joinedNum[0]!.completedAt).toBeDefined();
 
       const userChNum = await repoNum.getUserChallenge(1, 1);
       expect(userChNum!.progress).toBe(0);
@@ -780,7 +849,7 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
 
       const repo = new ActivityRepository(mockDbConnection);
-      
+
       const activity = await repo.findById(1);
       expect(activity).toBeDefined();
       expect(activity!.quantity).toBe(10.5);
@@ -789,11 +858,11 @@ describe('Repositories Integration & Postgres Paths', () => {
 
       mockDbConnection.query = vi.fn().mockResolvedValue([{ category: 'transport', total_emissions: null }]);
       const summary = await repo.getCategorySummary(1, new Date(), new Date());
-      expect(summary[0].totalEmissions).toBe(0);
+      expect(summary[0]!.totalEmissions).toBe(0);
 
       mockDbConnection.query = vi.fn().mockResolvedValue([{ log_date: '2026-06-19', total_emissions: null }]);
       const daily = await repo.getDailyEmissionsSummary(1, new Date(), new Date());
-      expect(daily[0].totalEmissions).toBe(0);
+      expect(daily[0]!.totalEmissions).toBe(0);
     });
 
     it('ChallengeRepository - covers mapRowToChallenge and mapRowToUserChallenge string values', async () => {
@@ -833,4 +902,3 @@ describe('Repositories Integration & Postgres Paths', () => {
     });
   });
 });
-

@@ -21,11 +21,11 @@ export interface DailySummary {
 }
 
 export interface IActivityRepository {
-  create(activity: Omit<Activity, 'id'>): Promise<Activity>;
-  findById(id: number): Promise<Activity | null>;
-  findByUserId(userId: number, filters?: ActivityFilters): Promise<{ activities: Activity[]; total: number }>;
-  delete(id: number, userId: number): Promise<boolean>;
-  getCategorySummary(userId: number, startDate: Date, endDate: Date): Promise<CategorySummary[]>;
-  getDailyEmissionsSummary(userId: number, startDate: Date, endDate: Date): Promise<DailySummary[]>;
-  getStreakInfo(userId: number): Promise<{ lastLogDate: Date | null; currentStreak: number }>;
+  create: (activity: Omit<Activity, 'id'>) => Promise<Activity>;
+  findById: (id: number) => Promise<Activity | null>;
+  findByUserId: (userId: number, filters?: ActivityFilters) => Promise<{ activities: Activity[]; total: number }>;
+  delete: (id: number, userId: number) => Promise<boolean>;
+  getCategorySummary: (userId: number, startDate: Date, endDate: Date) => Promise<CategorySummary[]>;
+  getDailyEmissionsSummary: (userId: number, startDate: Date, endDate: Date) => Promise<DailySummary[]>;
+  getStreakInfo: (userId: number) => Promise<{ lastLogDate: Date | null; currentStreak: number }>;
 }

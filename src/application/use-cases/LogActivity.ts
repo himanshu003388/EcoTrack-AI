@@ -38,7 +38,7 @@ export class LogActivity {
   constructor(
     private activityRepository: IActivityRepository,
     private userRepository: IUserRepository,
-    private challengeRepository: IChallengeRepository
+    private challengeRepository: IChallengeRepository,
   ) {}
 
   /**
@@ -54,15 +54,12 @@ export class LogActivity {
       throw new Error(`Invalid category: "${input.category}". Must be one of: ${VALID_CATEGORIES.join(', ')}.`);
     }
 
-    const factorInfo = EmissionCalculator.getFactorInfo(
-      input.category,
-      input.subcategory
-    );
+    const factorInfo = EmissionCalculator.getFactorInfo(input.category, input.subcategory);
     if (!factorInfo) {
       throw new Error(`Invalid subcategory: "${input.subcategory}" for category "${input.category}".`);
     }
 
-    const timestamp = input.timestamp || new Date();
+    const timestamp = input.timestamp ?? new Date();
 
     // Business rule: activities cannot be timestamped in the future
     const now = new Date();
@@ -70,11 +67,7 @@ export class LogActivity {
       throw new Error('Activity timestamp cannot be in the future.');
     }
 
-    const co2Emissions = EmissionCalculator.calculate(
-      input.category,
-      input.subcategory,
-      input.quantity
-    );
+    const co2Emissions = EmissionCalculator.calculate(input.category, input.subcategory, input.quantity);
 
     const activity = await this.activityRepository.create({
       userId: input.userId,
@@ -84,8 +77,8 @@ export class LogActivity {
       unit: input.unit,
       co2Emissions,
       timestamp,
-      isRecurring: !!input.isRecurring,
-      recurrencePeriod: input.recurrencePeriod || 'none',
+      isRecurring: input.isRecurring === true,
+      recurrencePeriod: input.recurrencePeriod ?? 'none',
     });
 
     // Fetch user once and reuse across sub-operations (avoids duplicate DB calls)
@@ -115,7 +108,7 @@ export class LogActivity {
   private async updateUserPointsAndStreak(
     userId: number,
     currentPoints: number,
-    currentStreak: number
+    currentStreak: number,
   ): Promise<number> {
     let pointsEarned = POINTS_PER_LOG;
     const streakInfo = await this.activityRepository.getStreakInfo(userId);
@@ -144,14 +137,9 @@ export class LogActivity {
    * @param user - The user entity (passed in to avoid a duplicate DB fetch).
    * @param category - The category of the activity just logged.
    */
-  private async progressActiveChallenges(
-    user: User,
-    category: ActivityCategory
-  ): Promise<void> {
+  private async progressActiveChallenges(user: User, category: ActivityCategory): Promise<void> {
     const activeChallenges = await this.challengeRepository.getUserChallenges(user.id);
-    const categoryChallenges = activeChallenges.filter(
-      (c) => c.status === 'active' && c.category === category
-    );
+    const categoryChallenges = activeChallenges.filter((c) => c.status === 'active' && c.category === category);
 
     if (categoryChallenges.length === 0) return;
 
@@ -170,12 +158,7 @@ export class LogActivity {
         }
       }
 
-      await this.challengeRepository.updateChallengeProgress(
-        user.id,
-        joinedCh.challengeId,
-        newProgress,
-        newStatus
-      );
+      await this.challengeRepository.updateChallengeProgress(user.id, joinedCh.challengeId, newProgress, newStatus);
     }
   }
 }

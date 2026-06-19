@@ -3,7 +3,12 @@
  * No string interpolation is used in SQL expressions.
  * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
  */
-import { IActivityRepository, ActivityFilters, CategorySummary, DailySummary } from '../../domain/repositories/IActivityRepository';
+import {
+  IActivityRepository,
+  ActivityFilters,
+  CategorySummary,
+  DailySummary,
+} from '../../domain/repositories/IActivityRepository';
 import { Activity, ActivityCategory } from '../../domain/entities/Activity';
 import { DatabaseConnection } from './DatabaseConnection';
 
@@ -33,20 +38,22 @@ export class ActivityRepository implements IActivityRepository {
       unit: row.unit,
       co2Emissions: typeof row.co2_emissions === 'string' ? parseFloat(row.co2_emissions) : row.co2_emissions,
       timestamp: new Date(row.timestamp),
-      isRecurring: !!row.is_recurring,
-      recurrencePeriod: (row.recurrence_period as 'daily' | 'weekly' | 'none') || 'none'
+      isRecurring: row.is_recurring === true || row.is_recurring === 1,
+      recurrencePeriod:
+        row.recurrence_period === 'daily' || row.recurrence_period === 'weekly' ? row.recurrence_period : 'none',
     };
   }
 
   async findById(id: number): Promise<Activity | null> {
     const rows = await this.db.query<ActivityRow>('SELECT * FROM activities WHERE id = $1', [id]);
-    if (rows.length === 0) return null;
-    return this.mapRowToActivity(rows[0]);
+    const firstRow = rows[0];
+    if (!firstRow) return null;
+    return this.mapRowToActivity(firstRow);
   }
 
   async create(activity: Omit<Activity, 'id'>): Promise<Activity> {
     const isRecurring = activity.isRecurring ? 1 : 0;
-    
+
     if (this.db.getIsPostgres()) {
       const sql = `
         INSERT INTO activities (user_id, category, subcategory, quantity, unit, co2_emissions, timestamp, is_recurring, recurrence_period)
@@ -62,10 +69,12 @@ export class ActivityRepository implements IActivityRepository {
         activity.co2Emissions,
         activity.timestamp,
         activity.isRecurring,
-        activity.recurrencePeriod
+        activity.recurrencePeriod,
       ];
       const rows = await this.db.query<ActivityRow>(sql, params);
-      return this.mapRowToActivity(rows[0]);
+      const firstRow = rows[0];
+      if (!firstRow) throw new Error('[ActivityRepository] Insert failed.');
+      return this.mapRowToActivity(firstRow);
     } else {
       const sql = `
         INSERT INTO activities (user_id, category, subcategory, quantity, unit, co2_emissions, timestamp, is_recurring, recurrence_period)
@@ -80,10 +89,12 @@ export class ActivityRepository implements IActivityRepository {
         activity.co2Emissions,
         activity.timestamp.toISOString(),
         isRecurring,
-        activity.recurrencePeriod
+        activity.recurrencePeriod,
       ];
       const res = await this.db.query<ActivityRow>(sql, params);
-      const insertedId = res[0].id;
+      const firstResRow = res[0];
+      if (!firstResRow) throw new Error('[ActivityRepository] Insert failed.');
+      const insertedId = firstResRow.id;
       const created = await this.findById(insertedId);
       if (!created) throw new Error('[ActivityRepository] Created activity could not be retrieved.');
       return created;
@@ -103,7 +114,7 @@ export class ActivityRepository implements IActivityRepository {
         params.push(filters.category);
         paramIndex++;
       }
-      if (filters.subcategory) {
+      if (filters.subcategory !== undefined && filters.subcategory !== '') {
         sql += ` AND subcategory = $${paramIndex}`;
         countSql += ` AND subcategory = $${paramIndex}`;
         params.push(filters.subcategory);
@@ -121,17 +132,26 @@ export class ActivityRepository implements IActivityRepository {
         params.push(filters.endDate.toISOString());
         paramIndex++;
       }
-      if (filters.search) {
-        sql += ` AND LOWER(subcategory) LIKE $${paramIndex}`;
-        countSql += ` AND LOWER(subcategory) LIKE $${paramIndex}`;
-        params.push(`%${filters.search.toLowerCase()}%`);
-        paramIndex++;
+      if (filters.search !== undefined && filters.search !== '') {
+        const sanitizedSearch = String(filters.search)
+          .replace(/[%_\\]/g, '\\$&')
+          .slice(0, 100);
+        if (sanitizedSearch.length < 2) {
+          sql += ` AND 1=0`;
+          countSql += ` AND 1=0`;
+        } else {
+          sql += ` AND LOWER(subcategory) LIKE $${paramIndex} ESCAPE '\\'`;
+          countSql += ` AND LOWER(subcategory) LIKE $${paramIndex} ESCAPE '\\'`;
+          params.push(`%${sanitizedSearch.toLowerCase()}%`);
+          paramIndex++;
+        }
       }
     }
 
     // Run count first
     const countResult = await this.db.query<{ count: string | number }>(countSql, params);
-    const total = parseInt(String(countResult[0].count), 10);
+    const firstCountRow = countResult[0];
+    const total = firstCountRow ? parseInt(String(firstCountRow.count), 10) : 0;
 
     // Apply sorting and pagination to list query
     sql += ' ORDER BY timestamp DESC';
@@ -150,8 +170,8 @@ export class ActivityRepository implements IActivityRepository {
 
     const rows = await this.db.query<ActivityRow>(sql, params);
     return {
-      activities: rows.map(r => this.mapRowToActivity(r)),
-      total
+      activities: rows.map((r) => this.mapRowToActivity(r)),
+      total,
     };
   }
 
@@ -164,15 +184,15 @@ export class ActivityRepository implements IActivityRepository {
     if (isPostgres) {
       const rows = await this.db.query<{ id: number }>(
         'DELETE FROM activities WHERE id = $1 AND user_id = $2 RETURNING id',
-        [id, userId]
+        [id, userId],
       );
       return rows.length > 0;
     } else {
       // For SQLite, check existence first since RETURNING is not supported for DELETE
-      const existing = await this.db.query<ActivityRow>(
-        'SELECT id FROM activities WHERE id = $1 AND user_id = $2',
-        [id, userId]
-      );
+      const existing = await this.db.query<ActivityRow>('SELECT id FROM activities WHERE id = $1 AND user_id = $2', [
+        id,
+        userId,
+      ]);
       if (existing.length === 0) return false;
       await this.db.query('DELETE FROM activities WHERE id = $1 AND user_id = $2', [id, userId]);
       return true;
@@ -186,45 +206,54 @@ export class ActivityRepository implements IActivityRepository {
       WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
       GROUP BY category
     `;
-    const rows = await this.db.query<{ category: string; total_emissions: string | number }>(sql, [userId, startDate.toISOString(), endDate.toISOString()]);
-    return rows.map(r => ({
+    const rows = await this.db.query<{ category: string; total_emissions: string | number | null }>(sql, [
+      userId,
+      startDate.toISOString(),
+      endDate.toISOString(),
+    ]);
+    return rows.map((r) => ({
       category: r.category as ActivityCategory,
-      totalEmissions: parseFloat(String(r.total_emissions || 0))
+      totalEmissions: r.total_emissions !== null ? parseFloat(String(r.total_emissions)) : 0,
     }));
   }
 
   async getDailyEmissionsSummary(userId: number, startDate: Date, endDate: Date): Promise<DailySummary[]> {
-    // For grouping by date:
-    // SQLite: strftime('%Y-%m-%d', timestamp)
-    // Postgres: DATE(timestamp)
     const isPostgres = this.db.getIsPostgres();
-    const dateSelect = isPostgres 
-      ? "TO_CHAR(timestamp, 'YYYY-MM-DD')" 
-      : "strftime('%Y-%m-%d', timestamp)";
-
-    const sql = `
-      SELECT ${dateSelect} as log_date, SUM(co2_emissions) as total_emissions
-      FROM activities
-      WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
-      GROUP BY log_date
-      ORDER BY log_date ASC
-    `;
-    const rows = await this.db.query<{ log_date: string; total_emissions: string | number }>(sql, [userId, startDate.toISOString(), endDate.toISOString()]);
-    return rows.map(r => ({
+    const sql = isPostgres
+      ? `
+        SELECT TO_CHAR(timestamp, 'YYYY-MM-DD') as log_date, SUM(co2_emissions) as total_emissions
+        FROM activities
+        WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
+        GROUP BY log_date
+        ORDER BY log_date ASC
+      `
+      : `
+        SELECT strftime('%Y-%m-%d', timestamp) as log_date, SUM(co2_emissions) as total_emissions
+        FROM activities
+        WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
+        GROUP BY log_date
+        ORDER BY log_date ASC
+      `;
+    const rows = await this.db.query<{ log_date: string; total_emissions: string | number | null }>(sql, [
+      userId,
+      startDate.toISOString(),
+      endDate.toISOString(),
+    ]);
+    return rows.map((r) => ({
       date: r.log_date,
-      totalEmissions: parseFloat(String(r.total_emissions || 0))
+      totalEmissions: r.total_emissions !== null ? parseFloat(String(r.total_emissions)) : 0,
     }));
   }
 
   async getStreakInfo(userId: number): Promise<{ lastLogDate: Date | null; currentStreak: number }> {
-    // Determine user's current consecutive active days log streak
     const sql = 'SELECT timestamp FROM activities WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 50';
     const rows = await this.db.query<{ timestamp: string | Date }>(sql, [userId]);
-    if (rows.length === 0) {
+    const firstRow = rows[0];
+    if (!firstRow) {
       return { lastLogDate: null, currentStreak: 0 };
     }
 
-    const logDates = rows.map(r => {
+    const logDates = rows.map((r) => {
       const d = new Date(r.timestamp);
       return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     });
@@ -236,11 +265,11 @@ export class ActivityRepository implements IActivityRepository {
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     const yesterdayMidnight = todayMidnight - 24 * 60 * 60 * 1000;
 
-    const lastLogDate = new Date(rows[0].timestamp);
+    const lastLogDate = new Date(firstRow.timestamp);
     const lastLogMidnight = uniqueDates[0];
 
     // If last log is older than yesterday, streak is broken
-    if (lastLogMidnight < yesterdayMidnight) {
+    if (lastLogMidnight === undefined || lastLogMidnight < yesterdayMidnight) {
       return { lastLogDate, currentStreak: 0 };
     }
 

@@ -3,7 +3,9 @@
  * No string interpolation is used in SQL expressions.
  * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
  */
-import * as fs from 'fs';
+import * as crypto from 'crypto';
+import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { Pool } from 'pg';
 import * as sqlite3 from 'sqlite3';
@@ -18,14 +20,19 @@ export class DatabaseConnection {
 
   constructor() {
     const dbUrl = process.env.DATABASE_URL;
-    if (dbUrl) {
+    if (dbUrl !== undefined && dbUrl !== '') {
       this.pgPool = new Pool({
         connectionString: dbUrl,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        ssl:
+          process.env.NODE_ENV === 'production'
+            ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+            : false,
       });
       this.isPostgres = true;
     } else {
-      const dbPath = path.resolve(process.cwd(), 'ecotrack.db');
+      const envPath = process.env.SQLITE_DB_PATH;
+      const dbPath =
+        envPath !== undefined && envPath !== '' ? envPath : path.resolve(__dirname, '../../../ecotrack.db');
       const sqlite = sqlite3.verbose();
       this.sqliteDb = new sqlite.Database(dbPath);
       this.isPostgres = false;
@@ -40,7 +47,9 @@ export class DatabaseConnection {
       const schemaFile = path.resolve(__dirname, '../persistence/schema.sql');
       let schemaSql = '';
       try {
-        schemaSql = fs.readFileSync(schemaFile, 'utf8');
+        if (existsSync(schemaFile)) {
+          schemaSql = await readFile(schemaFile, 'utf8');
+        }
       } catch {
         schemaSql = this.getDefaultSchemaSql();
       }
@@ -180,52 +189,117 @@ export class DatabaseConnection {
         end_date TIMESTAMPTZ NOT NULL,
         achieved BOOLEAN DEFAULT FALSE
       );
+      CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id);
+      CREATE INDEX IF NOT EXISTS idx_activities_timestamp ON activities(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_activities_category ON activities(category);
+      CREATE INDEX IF NOT EXISTS idx_goals_user_id ON goals(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_challenges_user_id ON user_challenges(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_badges_user_id ON user_badges(user_id);
     `;
   }
 
   private async seedChallengesAndBadges(): Promise<void> {
-    const userCount = await this.query('SELECT COUNT(*) as count FROM users');
-    if (userCount[0].count === 0 || userCount[0].count === '0') {
+    const userCount = await this.query<{ count: string | number }>('SELECT COUNT(*) as count FROM users');
+    const firstUserCount = userCount[0];
+    if (firstUserCount && (firstUserCount.count === 0 || firstUserCount.count === '0')) {
+      /**
+       * @security The default user password hash is loaded from SEED_USER_PASSWORD_HASH env var.
+       * Hardcoded hashes in source code are a CWE-259 vulnerability (hard-coded password).
+       * In production, always set SEED_USER_PASSWORD_HASH to a strong Argon2id hash.
+       * If not set in production, a cryptographically random placeholder is used so the
+       * default account cannot be accessed via any known password.
+       */
+      const fallbackHash =
+        process.env.SEED_USER_PASSWORD_HASH ??
+        (process.env.NODE_ENV === 'production'
+          ? // In production without env var: use a random hash that cannot be reversed or used to login
+            `$argon2id-locked$${Buffer.from(crypto.randomBytes(32)).toString('base64')}`
+          : // In development: use a random hash unless SEED_DEV_PASSWORD_HASH is explicitly set
+            (process.env.SEED_DEV_PASSWORD_HASH ??
+            `$argon2id-dev$${Buffer.from(crypto.randomBytes(32)).toString('base64')}`));
+
+      if (
+        (process.env.SEED_USER_PASSWORD_HASH === undefined || process.env.SEED_USER_PASSWORD_HASH === '') &&
+        process.env.NODE_ENV === 'production'
+      ) {
+        /* eslint-disable-next-line no-console */
+        console.warn(
+          '[EcoTrack AI] WARNING: SEED_USER_PASSWORD_HASH not set in production. Default user account is locked with a random password and cannot be used. Set SEED_USER_PASSWORD_HASH to an Argon2id hash to enable login.',
+        );
+      }
+
       if (this.isPostgres) {
         await this.query(
-          "INSERT INTO users (id, email, username, password_hash, points, level, streak) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password', 0, 'Seedling', 0)"
+          'INSERT INTO users (id, email, username, password_hash, points, level, streak) VALUES (1, $1, $2, $3, 0, $4, 0)',
+          ['user@ecotrack.ai', 'EcoTrack User', fallbackHash, 'Seedling'],
         );
       } else {
         await this.query(
-          "INSERT INTO users (id, email, username, password_hash, points, level, streak, created_at) VALUES (1, 'user@ecotrack.ai', 'EcoTrack User', 'no-password', 0, 'Seedling', 0, CURRENT_TIMESTAMP)"
+          'INSERT INTO users (id, email, username, password_hash, points, level, streak, created_at) VALUES (1, $1, $2, $3, 0, $4, 0, CURRENT_TIMESTAMP)',
+          ['user@ecotrack.ai', 'EcoTrack User', fallbackHash, 'Seedling'],
         );
       }
     }
 
-    const chCount = await this.query('SELECT COUNT(*) as count FROM challenges');
-    if (chCount[0].count === 0 || chCount[0].count === '0') {
+    const chCount = await this.query<{ count: string | number }>('SELECT COUNT(*) as count FROM challenges');
+    const firstChCount = chCount[0];
+    if (firstChCount && (firstChCount.count === 0 || firstChCount.count === '0')) {
       const challenges = [
-        ['Car-Free Week', 'transport', 'Replace all car trips with public transit, cycling, or walking for 7 days.', 150, 20.0, 7],
-        ['Plant-Based Week', 'food', 'Eat only vegetarian or vegan meals for 7 consecutive days to lower agricultural footprint.', 200, 35.0, 7],
-        ['Energy Saver Challenge', 'energy', 'Turn off idle appliances, unplug charger bricks, and switch to eco settings.', 100, 10.0, 5],
-        ['Recycling Champion', 'shopping_waste', 'Recycle glass, plastic, and paper, and avoid landfill waste for 7 days.', 120, 5.0, 7]
+        [
+          'Car-Free Week',
+          'transport',
+          'Replace all car trips with public transit, cycling, or walking for 7 days.',
+          150,
+          20.0,
+          7,
+        ],
+        [
+          'Plant-Based Week',
+          'food',
+          'Eat only vegetarian or vegan meals for 7 consecutive days to lower agricultural footprint.',
+          200,
+          35.0,
+          7,
+        ],
+        [
+          'Energy Saver Challenge',
+          'energy',
+          'Turn off idle appliances, unplug charger bricks, and switch to eco settings.',
+          100,
+          10.0,
+          5,
+        ],
+        [
+          'Recycling Champion',
+          'shopping_waste',
+          'Recycle glass, plastic, and paper, and avoid landfill waste for 7 days.',
+          120,
+          5.0,
+          7,
+        ],
       ];
       for (const ch of challenges) {
         await this.query(
           'INSERT INTO challenges (title, category, description, points_reward, co2_target, duration_days) VALUES ($1, $2, $3, $4, $5, $6)',
-          ch
+          ch,
         );
       }
     }
 
-    const bgCount = await this.query('SELECT COUNT(*) as count FROM badges');
-    if (bgCount[0].count === 0 || bgCount[0].count === '0') {
+    const bgCount = await this.query<{ count: string | number }>('SELECT COUNT(*) as count FROM badges');
+    const firstBgCount = bgCount[0];
+    if (firstBgCount && (firstBgCount.count === 0 || firstBgCount.count === '0')) {
       const badges = [
         ['First Footprint Logged', 'Your journey towards carbon awareness begins!', 'leaf', 'logs_count', 1],
         ['Consistent Tracker', 'Log your activities for 7 days in a row.', 'flame', 'streak', 7],
         ['Green Activist', 'Accumulate 500 environmental impact points.', 'award', 'points', 500],
         ['Carbon Slash Master', 'Saved substantial emissions of CO2e.', 'zap', 'co2_saved', 50],
-        ['Eco Champion', 'Complete 3 Eco Challenges successfully.', 'crown', 'points', 1000]
+        ['Eco Champion', 'Complete 3 Eco Challenges successfully.', 'crown', 'points', 1000],
       ];
       for (const bg of badges) {
         await this.query(
           'INSERT INTO badges (name, description, icon, condition_type, condition_value) VALUES ($1, $2, $3, $4, $5)',
-          bg
+          bg,
         );
       }
     }

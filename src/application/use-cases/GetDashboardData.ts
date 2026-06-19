@@ -1,6 +1,7 @@
 import { IActivityRepository } from '../../domain/repositories/IActivityRepository';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { IGoalRepository } from '../../domain/repositories/IGoalRepository';
+import { TTLCache } from '../../infrastructure/cache/TTLCache';
 import { EmissionCalculator } from '../../services/EmissionCalculator';
 import { Activity, ActivityCategory } from '../../domain/entities/Activity';
 
@@ -53,21 +54,24 @@ export interface DashboardData {
   } | null;
 }
 
-const dashboardCache = new Map<string, { data: unknown; expiresAt: number }>();
-const CACHE_TTL_MS = 30_000; // 30 seconds
+const dashboardCache = new TTLCache<DashboardData>(30_000);
 
-/**
- * Clears the cached dashboard data.
- *
- * @param userId - Optional specific user ID to clear cache for. If omitted, clears all cache.
- */
 export function clearDashboardCache(userId?: number): void {
-  if (userId !== undefined) {
-    dashboardCache.delete(`dashboard_${userId}`);
-  } else {
-    dashboardCache.clear();
-  }
+  dashboardCache.invalidate(userId !== undefined ? `dashboard_${userId}` : undefined);
 }
+
+const DAYS_IN_WEEK = 7;
+const DAYS_IN_MONTH = 30;
+const TREND_DAYS = 15;
+const DAYS_IN_YEAR = 365;
+const SUSTAINABLE_DAILY_TARGET_KG = 5.5;
+const BASELINE_SCORE = 70;
+const SCORE_MAX = 100;
+const SCORE_MIN = 10;
+const SCORE_REDUCTION_RATE = 10;
+const SCORE_EXCEED_SCALE = 15;
+const SCORE_EXCEED_RATE = 80;
+const SCORE_BASE = 90;
 
 /**
  * Use case: Compile all Carbon Intelligence Dashboard data for a user.
@@ -80,8 +84,8 @@ export class GetDashboardData {
   constructor(
     private activityRepository: IActivityRepository,
     private userRepository: IUserRepository,
-    private goalRepository: IGoalRepository
-  ) { }
+    private goalRepository: IGoalRepository,
+  ) {}
 
   /**
    * Execute the dashboard data compilation.
@@ -93,9 +97,7 @@ export class GetDashboardData {
   async execute(userId: number): Promise<DashboardData> {
     const cacheKey = `dashboard_${userId}`;
     const cached = dashboardCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data as DashboardData;
-    }
+    if (cached) return cached;
 
     const user = await this.userRepository.findById(userId);
     if (!user) throw new Error('User not found.');
@@ -104,9 +106,9 @@ export class GetDashboardData {
 
     // Date boundaries
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const startOfMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const startOfTrend = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+    const startOfWeek = new Date(now.getTime() - DAYS_IN_WEEK * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(now.getTime() - DAYS_IN_MONTH * 24 * 60 * 60 * 1000);
+    const startOfTrend = new Date(now.getTime() - TREND_DAYS * 24 * 60 * 60 * 1000);
 
     // 1. Parallel fetch: one broad activity load + category summary + trend data + current goal
     //    Activities are fetched for the last 30 days in a single query; sub-ranges are computed in memory.
@@ -132,23 +134,25 @@ export class GetDashboardData {
       if (t >= startOfToday) todayEmissions += a.co2Emissions;
     }
 
-
     // 3. Annual projection — proportional to actual tracked days (not always 30)
     //    Use min(30, days since account creation) as the denominator so new users
     //    don't get an inflated projection.
     const trackedDays = Math.min(
-      30,
-      Math.max(1, Math.round((now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24)))
+      DAYS_IN_MONTH,
+      Math.max(1, Math.round((now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24))),
     );
     const dailyAverage = monthlyEmissions / trackedDays;
-    const annualProjection = dailyAverage * 365;
+    const annualProjection = dailyAverage * DAYS_IN_YEAR;
 
     // 4. Category breakdown
     const categories: ActivityCategory[] = ['transport', 'energy', 'food', 'shopping_waste'];
     const breakdownMap: Record<ActivityCategory, number> = {
-      transport: 0, energy: 0, food: 0, shopping_waste: 0
+      transport: 0,
+      energy: 0,
+      food: 0,
+      shopping_waste: 0,
     };
-    categorySummary.forEach(c => {
+    categorySummary.forEach((c) => {
       breakdownMap[c.category] = c.totalEmissions;
     });
 
@@ -157,7 +161,7 @@ export class GetDashboardData {
     let lowestSourceCat: ActivityCategory | 'None' = 'None';
     let lowestSourceVal = Infinity;
 
-    const categoryBreakdown = categories.map(cat => {
+    const categoryBreakdown = categories.map((cat) => {
       const emissions = breakdownMap[cat];
       const roundedEmissions = Math.round(emissions * 10) / 10;
       const percentage = monthlyEmissions > 0 ? Math.round((emissions / monthlyEmissions) * 100) : 0;
@@ -174,7 +178,7 @@ export class GetDashboardData {
       return {
         category: cat,
         emissions: roundedEmissions,
-        percentage
+        percentage,
       };
     });
 
@@ -188,15 +192,17 @@ export class GetDashboardData {
 
     // 6. Dynamic sustainability score
     //    Sustainable target is 5.5 kg/day. Score ∈ [10, 100].
-    let sustainabilityScore = 70; // baseline for users with no logs
+    let sustainabilityScore = BASELINE_SCORE;
     if (monthlyEmissions > 0) {
-      const targetDaily = 5.5;
+      const targetDaily = SUSTAINABLE_DAILY_TARGET_KG;
       const averageDailyEmission = dailyAverage;
       if (averageDailyEmission <= targetDaily) {
-        sustainabilityScore = Math.round(100 - (averageDailyEmission / targetDaily) * 10);
+        sustainabilityScore = Math.round(SCORE_MAX - (averageDailyEmission / targetDaily) * SCORE_REDUCTION_RATE);
       } else {
-        const scale = 15;
-        sustainabilityScore = Math.max(10, Math.round(90 - ((averageDailyEmission - targetDaily) / scale) * 80));
+        sustainabilityScore = Math.max(
+          SCORE_MIN,
+          Math.round(SCORE_BASE - ((averageDailyEmission - targetDaily) / SCORE_EXCEED_SCALE) * SCORE_EXCEED_RATE),
+        );
       }
     }
 
@@ -208,36 +214,41 @@ export class GetDashboardData {
 
     // 8. Daily trend chart (last 15 days) — fill gaps with 0 for a smooth timeline
     const trendMap = new Map<string, number>();
-    rawTrends.forEach(t => trendMap.set(t.date, t.totalEmissions));
+    rawTrends.forEach((t) => trendMap.set(t.date, t.totalEmissions));
 
     const trends: { date: string; emissions: number }[] = [];
     for (let i = 15; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = d.toISOString().split('T')[0] ?? '';
       trends.push({
         date: dateStr,
-        emissions: Math.round((trendMap.get(dateStr) || 0) * 10) / 10
+        emissions: Math.round((trendMap.get(dateStr) ?? 0) * 10) / 10,
       });
     }
 
     // 9. Current goal
-    const currentGoal = currentGoalData ? {
-      targetCo2: currentGoalData.targetCo2,
-      achieved: currentGoalData.achieved,
-      endDate: currentGoalData.endDate
-    } : null;
+    const currentGoal = currentGoalData
+      ? {
+          targetCo2: currentGoalData.targetCo2,
+          achieved: currentGoalData.achieved,
+          endDate: currentGoalData.endDate,
+        }
+      : null;
 
     // 10. Human-readable explanation
-    let explanation = "Great! You don't have any emissions recorded in the last month. Keep tracking your habits to evaluate your score.";
+    let explanation =
+      "Great! You don't have any emissions recorded in the last month. Keep tracking your habits to evaluate your score.";
     if (monthlyEmissions > 0) {
       const sourceName = highestSourceCat.replace('_', ' ');
       explanation = `${sourceName.charAt(0).toUpperCase() + sourceName.slice(1)} contributes ${highestPct}% of your emissions and is your largest emission source.`;
       if (sustainabilityScore > 80) {
         explanation += ' Your footprint is well within the sustainable target range. Superb work!';
       } else if (sustainabilityScore > 50) {
-        explanation += ' Your footprint is close to the average. Look for quick reduction wins in transportation and energy.';
+        explanation +=
+          ' Your footprint is close to the average. Look for quick reduction wins in transportation and energy.';
       } else {
-        explanation += ' Your footprint is higher than the sustainable target. Swapping some car trips for public transit or walking can make a big impact.';
+        explanation +=
+          ' Your footprint is higher than the sustainable target. Swapping some car trips for public transit or walking can make a big impact.';
       }
     }
 
@@ -247,28 +258,28 @@ export class GetDashboardData {
         today: Math.round(todayEmissions * 10) / 10,
         weekly: Math.round(weeklyEmissions * 10) / 10,
         monthly: Math.round(monthlyEmissions * 10) / 10,
-        annualProjection: Math.round(annualProjection * 10) / 10
+        annualProjection: Math.round(annualProjection * 10) / 10,
       },
       averages: {
         nationalDaily: 16.0, // US national average kg CO2e/day
         globalDaily: 11.5,
-        sustainableDaily: 5.5
+        sustainableDaily: SUSTAINABLE_DAILY_TARGET_KG,
       },
       highestSource: {
         category: highestSourceCat,
         percentage: highestPct,
-        emissions: Math.round(highestSourceVal * 10) / 10
+        emissions: Math.round(highestSourceVal * 10) / 10,
       },
       lowestSource: {
         category: lowestSourceCat,
-        emissions: Math.round(lowestSourceVal * 10) / 10
+        emissions: Math.round(lowestSourceVal * 10) / 10,
       },
       categoryBreakdown,
       equivalents: {
         treesNeeded,
         carKm,
         electricityHours,
-        phoneCharges
+        phoneCharges,
       },
       trends,
       explanation,
@@ -276,12 +287,12 @@ export class GetDashboardData {
         username: user.username,
         points: user.points,
         level: user.level,
-        streak: user.streak
+        streak: user.streak,
       },
-      currentGoal
+      currentGoal,
     };
 
-    dashboardCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+    dashboardCache.set(cacheKey, result);
     return result;
   }
 }

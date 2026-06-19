@@ -8,49 +8,77 @@ import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CardSkeleton } from './components/Skeleton';
 import { ToastProvider } from './components/Toast';
+import { useRouteAnnounce } from './components/Hooks';
 
-// Global CSRF fetch interceptor
-let csrfTokenInMemory: string | null = null;
-const originalFetch = window.fetch;
-window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  const method = (init?.method || 'GET').toUpperCase();
+interface CsrfManager {
+  token: string | null;
+  refreshPromise: Promise<void> | null;
+}
+
+const csrfState: CsrfManager = { token: null, refreshPromise: null };
+
+function getCsrfToken(): string | null {
+  return csrfState.token;
+}
+
+async function refreshCsrfToken(): Promise<void> {
+  if (csrfState.refreshPromise) return csrfState.refreshPromise;
+  csrfState.refreshPromise = (async (): Promise<void> => {
+    try {
+      const tokenRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      if (tokenRes.ok) {
+        const data = (await tokenRes.json()) as { csrfToken: string };
+        csrfState.token = data.csrfToken;
+      }
+    } catch {
+      csrfState.token = null;
+    } finally {
+      csrfState.refreshPromise = null;
+    }
+  })();
+  return csrfState.refreshPromise;
+}
+
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? 'GET').toUpperCase();
   const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
   if (['GET', 'HEAD', 'OPTIONS'].includes(method) || url.includes('/api/csrf-token')) {
-    return originalFetch(input, init);
+    return fetch(input, { ...init, credentials: 'include' });
   }
 
-  if (!csrfTokenInMemory) {
-    try {
-      const tokenRes = await originalFetch('/api/csrf-token');
-      if (tokenRes.ok) {
-        const data = (await tokenRes.json()) as { csrfToken: string };
-        csrfTokenInMemory = data.csrfToken;
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to pre-fetch CSRF token:', err);
-    }
+  if (csrfState.token === null) {
+    await refreshCsrfToken();
   }
 
   const headers = new Headers(init?.headers);
-  if (csrfTokenInMemory) {
-    headers.set('X-CSRF-Token', csrfTokenInMemory);
+  if (csrfState.token !== null) {
+    headers.set('X-CSRF-Token', csrfState.token);
   }
 
-  return originalFetch(input, {
-    ...init,
-    headers
-  });
-};
+  const response = await fetch(input, { ...init, headers, credentials: 'include' });
 
-const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Tracker = lazy(() => import('./pages/Tracker').then(m => ({ default: m.Tracker })));
-const Simulator = lazy(() => import('./pages/Simulator').then(m => ({ default: m.Simulator })));
-const ForecastPage = lazy(() => import('./pages/ForecastPage').then(m => ({ default: m.ForecastPage })));
-const Coach = lazy(() => import('./pages/Coach').then(m => ({ default: m.Coach })));
-const Challenges = lazy(() => import('./pages/Challenges').then(m => ({ default: m.Challenges })));
-const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
+  if (response.status === 403 && csrfState.token !== null) {
+    csrfState.token = null;
+    await refreshCsrfToken();
+    const tokenAfterRefresh = getCsrfToken();
+    if (tokenAfterRefresh !== null) {
+      const retryHeaders = new Headers(init?.headers);
+      retryHeaders.set('X-CSRF-Token', tokenAfterRefresh);
+      return fetch(input, { ...init, headers: retryHeaders, credentials: 'include' });
+    }
+  }
+
+  return response;
+}
+
+const Dashboard = lazy(async () => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const Tracker = lazy(async () => import('./pages/Tracker').then((m) => ({ default: m.Tracker })));
+const Simulator = lazy(async () => import('./pages/Simulator').then((m) => ({ default: m.Simulator })));
+const ForecastPage = lazy(async () => import('./pages/ForecastPage').then((m) => ({ default: m.ForecastPage })));
+const Coach = lazy(async () => import('./pages/Coach').then((m) => ({ default: m.Coach })));
+const Challenges = lazy(async () => import('./pages/Challenges').then((m) => ({ default: m.Challenges })));
+const ReportsPage = lazy(async () => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -122,13 +150,9 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     localStorage.setItem('ecotrack_theme', theme);
   }, [theme]);
 
-  const toggleTheme = (): void => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  const toggleTheme = (): void => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>;
 };
 
 const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -137,14 +161,13 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   const fetchUserProfile = async (): Promise<void> => {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await apiFetch('/api/auth/me');
       if (res.ok) {
         const data = (await res.json()) as AppUser;
         setUser(data);
       }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch user profile:', err);
+    } catch {
+      // Silently handle - user will see auth error state
     } finally {
       setLoading(false);
     }
@@ -154,14 +177,15 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     void fetchUserProfile();
   }, []);
 
-  const login = (): void => {};
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const login = (_token: string, _user: AppUser): void => {};
   const logout = (): void => {};
   const refreshUser = async (): Promise<void> => {
     await fetchUserProfile();
   };
 
   return (
-    <AuthContext.Provider value={{ token: 'dummy-token', user, login, logout, loading, refreshUser }}>
+    <AuthContext.Provider value={{ token: null, user, login, logout, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -178,14 +202,24 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
         aria-label="Loading EcoTrack AI application"
       >
         <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-forest-500 border-t-transparent" aria-hidden="true"></div>
-          <p className="text-slate-600 dark:text-slate-400 font-medium" aria-live="polite">Loading EcoTrack AI...</p>
+          <div
+            className="h-12 w-12 animate-spin rounded-full border-4 border-forest-500 border-t-transparent"
+            aria-hidden="true"
+          ></div>
+          <p className="text-slate-600 dark:text-slate-400 font-medium" aria-live="polite">
+            Loading EcoTrack AI...
+          </p>
         </div>
       </div>
     );
   }
 
   return <>{children}</>;
+};
+
+const RouteAnnouncer: React.FC = () => {
+  useRouteAnnounce();
+  return null;
 };
 
 const PageFallback: React.FC = () => (
@@ -208,39 +242,89 @@ const PageTransition: React.FC<{ children: React.ReactNode }> = ({ children }) =
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <ToastProvider>
-              <Routes>
-                <Route
-                  path="/*"
-                  element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Suspense fallback={<PageFallback />}>
-                          <Routes>
-                            <Route path="/" element={<PageTransition><Dashboard /></PageTransition>} />
-                            <Route path="/tracker" element={<PageTransition><Tracker /></PageTransition>} />
-                            <Route path="/simulator" element={<PageTransition><Simulator /></PageTransition>} />
-                            <Route path="/forecast" element={<PageTransition><ForecastPage /></PageTransition>} />
-                            <Route path="/coach" element={<PageTransition><Coach /></PageTransition>} />
-                            <Route path="/challenges" element={<PageTransition><Challenges /></PageTransition>} />
-                            <Route path="/reports" element={<PageTransition><ReportsPage /></PageTransition>} />
-                            <Route path="*" element={<Navigate to="/" replace />} />
-                          </Routes>
-                        </Suspense>
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-            </ToastProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </ThemeProvider>
-    </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <ToastProvider>
+                <Routes>
+                  <Route
+                    path="/*"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <RouteAnnouncer />
+                          <Suspense fallback={<PageFallback />}>
+                            <Routes>
+                              <Route
+                                path="/"
+                                element={
+                                  <PageTransition>
+                                    <Dashboard />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route
+                                path="/tracker"
+                                element={
+                                  <PageTransition>
+                                    <Tracker />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route
+                                path="/simulator"
+                                element={
+                                  <PageTransition>
+                                    <Simulator />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route
+                                path="/forecast"
+                                element={
+                                  <PageTransition>
+                                    <ForecastPage />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route
+                                path="/coach"
+                                element={
+                                  <PageTransition>
+                                    <Coach />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route
+                                path="/challenges"
+                                element={
+                                  <PageTransition>
+                                    <Challenges />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route
+                                path="/reports"
+                                element={
+                                  <PageTransition>
+                                    <ReportsPage />
+                                  </PageTransition>
+                                }
+                              />
+                              <Route path="*" element={<Navigate to="/" replace />} />
+                            </Routes>
+                          </Suspense>
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                </Routes>
+              </ToastProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </ThemeProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
