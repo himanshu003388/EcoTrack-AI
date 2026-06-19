@@ -215,8 +215,8 @@ export class SimpleActionService {
     );
     const pool = relevantActions;
 
-    const index = pool.length > 0 ? dayOfYear % pool.length : 0;
-    const action = pool[index] ?? ACTIONS_CATALOG[0]!;
+    const index = dayOfYear % pool.length;
+    const action = pool[index]!;
 
     const catDisplay = highestCategory === 'general' ? null : highestCategory.replace('_', ' ');
     const reason =

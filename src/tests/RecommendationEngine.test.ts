@@ -30,6 +30,18 @@ describe('RecommendationEngine Service Unit Tests', () => {
         isRecurring: false,
         recurrencePeriod: 'none',
       },
+      {
+        id: 3,
+        userId: 1,
+        category: 'energy',
+        subcategory: 'electricity',
+        quantity: 100,
+        unit: 'kWh',
+        co2Emissions: 50.0,
+        timestamp: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000), // 35 days ago
+        isRecurring: false,
+        recurrencePeriod: 'none',
+      },
     ];
 
     const recommendations = RecommendationEngine.generate(mockActivities);

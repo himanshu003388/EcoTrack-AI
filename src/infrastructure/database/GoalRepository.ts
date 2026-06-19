@@ -23,7 +23,7 @@ export class GoalRepository implements IGoalRepository {
     return {
       id: row.id,
       userId: row.user_id,
-      targetCo2: typeof row.target_co2 === 'string' ? parseFloat(row.target_co2) : row.target_co2,
+      targetCo2: Number(row.target_co2),
       startDate: new Date(row.start_date),
       endDate: new Date(row.end_date),
       achieved: row.achieved === true || row.achieved === 1,
@@ -51,8 +51,7 @@ export class GoalRepository implements IGoalRepository {
       `;
       const params = [goal.userId, goal.targetCo2, goal.startDate, goal.endDate, goal.achieved];
       const rows = await this.db.query<GoalRow>(sql, params);
-      const firstRow = rows[0];
-      if (!firstRow) throw new Error('[GoalRepository] Insert failed.');
+      const firstRow = rows[0]!;
       return this.mapRowToGoal(firstRow);
     } else {
       const sql = `
@@ -68,8 +67,7 @@ export class GoalRepository implements IGoalRepository {
         achievedInt,
       ];
       const res = await this.db.query<GoalRow>(sql, params);
-      const firstResRow = res[0];
-      if (!firstResRow) throw new Error('[GoalRepository] Insert failed.');
+      const firstResRow = res[0]!;
       const insertedId = firstResRow.id;
       const created = await this.db.query<GoalRow>('SELECT * FROM goals WHERE id = $1', [insertedId]);
       const firstCreatedRow = created[0];

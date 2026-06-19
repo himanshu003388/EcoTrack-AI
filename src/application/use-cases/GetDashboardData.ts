@@ -219,7 +219,7 @@ export class GetDashboardData {
     const trends: { date: string; emissions: number }[] = [];
     for (let i = 15; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateStr = d.toISOString().split('T')[0] ?? '';
+      const dateStr = d.toISOString().split('T')[0]!;
       trends.push({
         date: dateStr,
         emissions: Math.round((trendMap.get(dateStr) ?? 0) * 10) / 10,

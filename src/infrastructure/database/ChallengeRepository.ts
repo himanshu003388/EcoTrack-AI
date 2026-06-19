@@ -46,9 +46,9 @@ export class ChallengeRepository implements IChallengeRepository {
       title: row.title,
       category: row.category as ActivityCategory,
       description: row.description,
-      pointsReward: typeof row.points_reward === 'string' ? parseInt(row.points_reward, 10) : row.points_reward,
-      co2Target: typeof row.co2_target === 'string' ? parseFloat(row.co2_target) : row.co2_target,
-      durationDays: typeof row.duration_days === 'string' ? parseInt(row.duration_days, 10) : row.duration_days,
+      pointsReward: Number(row.points_reward),
+      co2Target: Number(row.co2_target),
+      durationDays: Number(row.duration_days),
     };
   }
 
@@ -57,8 +57,7 @@ export class ChallengeRepository implements IChallengeRepository {
       userId: row.user_id,
       challengeId: row.challenge_id,
       status: row.status as UserChallenge['status'],
-      progress:
-        row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
+      progress: Number(row.progress ?? 0),
       startedAt: new Date(row.started_at),
       completedAt: row.completed_at !== null && row.completed_at !== undefined ? new Date(row.completed_at) : undefined,
     };
@@ -94,16 +93,15 @@ export class ChallengeRepository implements IChallengeRepository {
       userId: row.user_id,
       challengeId: row.challenge_id,
       status: row.status as UserChallenge['status'],
-      progress:
-        row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
+      progress: Number(row.progress ?? 0),
       startedAt: new Date(row.started_at),
       completedAt: row.completed_at !== null && row.completed_at !== undefined ? new Date(row.completed_at) : undefined,
       title: row.title,
       category: row.category,
       description: row.description,
-      pointsReward: typeof row.points_reward === 'string' ? parseInt(row.points_reward, 10) : row.points_reward,
-      co2Target: typeof row.co2_target === 'string' ? parseFloat(row.co2_target) : row.co2_target,
-      durationDays: typeof row.duration_days === 'string' ? parseInt(row.duration_days, 10) : row.duration_days,
+      pointsReward: Number(row.points_reward),
+      co2Target: Number(row.co2_target),
+      durationDays: Number(row.duration_days),
     }));
   }
 

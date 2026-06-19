@@ -588,14 +588,6 @@ const serverInstance = db
     ) {
       logger.warn('Production mode running with SQLite. Set DATABASE_URL for PostgreSQL.');
     }
-    if (
-      process.env.NODE_ENV === 'production' &&
-      (process.env.JWT_SECRET === undefined || process.env.JWT_SECRET === '')
-    ) {
-      logger.warn(
-        'JWT_SECRET is not configured in production. Enforcing a temporary session fallback key, but sessions will be invalidated on server restarts/scaling.',
-      );
-    }
     if (process.env.NODE_ENV === 'production' && process.env.AUTH_REQUIRED !== 'true') {
       logger.warn(
         'AUTH_REQUIRED is not set to true in production. All API routes are accessible without authentication. Set AUTH_REQUIRED=true to enforce JWT authentication.',

@@ -141,6 +141,59 @@ describe('Auth middleware', () => {
       process.env.JWT_SECRET = originalSecret;
     }
   });
+
+  it('should return 500 when JWT_SECRET is not set in env and NODE_ENV is production', () => {
+    const originalSecret = process.env.JWT_SECRET;
+    const originalEnv = process.env.NODE_ENV;
+    delete process.env.JWT_SECRET;
+    process.env.NODE_ENV = 'production';
+
+    const req = mockReq({ authorization: 'Bearer some-token' });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+
+    authenticateToken(req, res, mockNextFn);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Authentication service is not properly configured.' });
+    expect(mockNextFn).not.toHaveBeenCalled();
+
+    if (originalSecret) process.env.JWT_SECRET = originalSecret;
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('should generate fallback secret and authenticate when JWT_SECRET is not set and NODE_ENV is not production', () => {
+    const originalSecret = process.env.JWT_SECRET;
+    const originalEnv = process.env.NODE_ENV;
+    delete process.env.JWT_SECRET;
+    process.env.NODE_ENV = 'development';
+
+    // To hit the block, we can authenticate a valid token signed with the generated fallback secret
+    const payload = { id: 123, email: 'dev@example.com', username: 'dev_user' };
+
+    // Call getJwtSecret indirectly by calling authenticateToken with no token first to initialize fallback,
+    // or by signing with the exported sessionFallbackSecret if it gets initialized.
+    // Let's call authenticateToken with an invalid token first to initialize the fallback secret
+    const reqInit = mockReq({ authorization: 'Bearer invalid' });
+    const resInit = mockRes();
+    authenticateToken(reqInit, resInit, vi.fn());
+
+    const fallbackSecret = sessionFallbackSecret!;
+    expect(fallbackSecret).toBeDefined();
+
+    const token = jwt.sign(payload, fallbackSecret);
+    const req = mockReq({ authorization: `Bearer ${token}` });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+
+    authenticateToken(req, res, mockNextFn);
+
+    expect((req as any).user).toEqual({ id: 123, email: 'dev@example.com', username: 'dev_user' });
+    expect(mockNextFn).toHaveBeenCalled();
+
+    if (originalSecret) process.env.JWT_SECRET = originalSecret;
+    process.env.NODE_ENV = originalEnv;
+  });
 });
 
 describe('Sanitize middleware', () => {
@@ -227,6 +280,14 @@ describe('Sanitize middleware', () => {
     const req = mockReq({});
     xssSanitizer(req, mockRes(), mockNext);
     expect(req.body).toEqual({});
+  });
+
+  it('should fall back to original entity match for entities not in HTML_ENTITY_MAP', () => {
+    const req = mockReq({
+      message: 'Hello &#30; world',
+    });
+    xssSanitizer(req, mockRes(), mockNext);
+    expect(req.body.message).toBe('Hello &#30; world');
   });
 });
 

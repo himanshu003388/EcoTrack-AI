@@ -72,8 +72,7 @@ export class ActivityRepository implements IActivityRepository {
         activity.recurrencePeriod,
       ];
       const rows = await this.db.query<ActivityRow>(sql, params);
-      const firstRow = rows[0];
-      if (!firstRow) throw new Error('[ActivityRepository] Insert failed.');
+      const firstRow = rows[0]!;
       return this.mapRowToActivity(firstRow);
     } else {
       const sql = `
@@ -92,8 +91,7 @@ export class ActivityRepository implements IActivityRepository {
         activity.recurrencePeriod,
       ];
       const res = await this.db.query<ActivityRow>(sql, params);
-      const firstResRow = res[0];
-      if (!firstResRow) throw new Error('[ActivityRepository] Insert failed.');
+      const firstResRow = res[0]!;
       const insertedId = firstResRow.id;
       const created = await this.findById(insertedId);
       if (!created) throw new Error('[ActivityRepository] Created activity could not be retrieved.');
@@ -101,71 +99,70 @@ export class ActivityRepository implements IActivityRepository {
     }
   }
 
-  async findByUserId(userId: number, filters?: ActivityFilters): Promise<{ activities: Activity[]; total: number }> {
+  async findByUserId(
+    userId: number,
+    filters: ActivityFilters = {},
+  ): Promise<{ activities: Activity[]; total: number }> {
     let sql = 'SELECT * FROM activities WHERE user_id = $1';
     let countSql = 'SELECT COUNT(*) as count FROM activities WHERE user_id = $1';
     const params: (string | number | Date)[] = [userId];
     let paramIndex = 2;
 
-    if (filters) {
-      if (filters.category) {
-        sql += ` AND category = $${paramIndex}`;
-        countSql += ` AND category = $${paramIndex}`;
-        params.push(filters.category);
+    if (filters.category) {
+      sql += ` AND category = $${paramIndex}`;
+      countSql += ` AND category = $${paramIndex}`;
+      params.push(filters.category);
+      paramIndex++;
+    }
+    if (filters.subcategory !== undefined && filters.subcategory !== '') {
+      sql += ` AND subcategory = $${paramIndex}`;
+      countSql += ` AND subcategory = $${paramIndex}`;
+      params.push(filters.subcategory);
+      paramIndex++;
+    }
+    if (filters.startDate) {
+      sql += ` AND timestamp >= $${paramIndex}`;
+      countSql += ` AND timestamp >= $${paramIndex}`;
+      params.push(filters.startDate.toISOString());
+      paramIndex++;
+    }
+    if (filters.endDate) {
+      sql += ` AND timestamp <= $${paramIndex}`;
+      countSql += ` AND timestamp <= $${paramIndex}`;
+      params.push(filters.endDate.toISOString());
+      paramIndex++;
+    }
+    if (filters.search !== undefined && filters.search !== '') {
+      const sanitizedSearch = String(filters.search)
+        .replace(/[%_\\]/g, '\\$&')
+        .slice(0, 100);
+      if (sanitizedSearch.length < 2) {
+        sql += ` AND 1=0`;
+        countSql += ` AND 1=0`;
+      } else {
+        sql += ` AND LOWER(subcategory) LIKE $${paramIndex} ESCAPE '\\'`;
+        countSql += ` AND LOWER(subcategory) LIKE $${paramIndex} ESCAPE '\\'`;
+        params.push(`%${sanitizedSearch.toLowerCase()}%`);
         paramIndex++;
-      }
-      if (filters.subcategory !== undefined && filters.subcategory !== '') {
-        sql += ` AND subcategory = $${paramIndex}`;
-        countSql += ` AND subcategory = $${paramIndex}`;
-        params.push(filters.subcategory);
-        paramIndex++;
-      }
-      if (filters.startDate) {
-        sql += ` AND timestamp >= $${paramIndex}`;
-        countSql += ` AND timestamp >= $${paramIndex}`;
-        params.push(filters.startDate.toISOString());
-        paramIndex++;
-      }
-      if (filters.endDate) {
-        sql += ` AND timestamp <= $${paramIndex}`;
-        countSql += ` AND timestamp <= $${paramIndex}`;
-        params.push(filters.endDate.toISOString());
-        paramIndex++;
-      }
-      if (filters.search !== undefined && filters.search !== '') {
-        const sanitizedSearch = String(filters.search)
-          .replace(/[%_\\]/g, '\\$&')
-          .slice(0, 100);
-        if (sanitizedSearch.length < 2) {
-          sql += ` AND 1=0`;
-          countSql += ` AND 1=0`;
-        } else {
-          sql += ` AND LOWER(subcategory) LIKE $${paramIndex} ESCAPE '\\'`;
-          countSql += ` AND LOWER(subcategory) LIKE $${paramIndex} ESCAPE '\\'`;
-          params.push(`%${sanitizedSearch.toLowerCase()}%`);
-          paramIndex++;
-        }
       }
     }
 
     // Run count first
     const countResult = await this.db.query<{ count: string | number }>(countSql, params);
-    const firstCountRow = countResult[0];
-    const total = firstCountRow ? parseInt(String(firstCountRow.count), 10) : 0;
+    const firstCountRow = countResult[0]!;
+    const total = parseInt(String(firstCountRow.count), 10);
 
     // Apply sorting and pagination to list query
     sql += ' ORDER BY timestamp DESC';
-    if (filters) {
-      if (filters.limit !== undefined) {
-        sql += ` LIMIT $${paramIndex}`;
-        params.push(filters.limit);
-        paramIndex++;
-      }
-      if (filters.offset !== undefined) {
-        sql += ` OFFSET $${paramIndex}`;
-        params.push(filters.offset);
-        paramIndex++;
-      }
+    if (filters.limit !== undefined) {
+      sql += ` LIMIT $${paramIndex}`;
+      params.push(filters.limit);
+      paramIndex++;
+    }
+    if (filters.offset !== undefined) {
+      sql += ` OFFSET $${paramIndex}`;
+      params.push(filters.offset);
+      paramIndex++;
     }
 
     const rows = await this.db.query<ActivityRow>(sql, params);

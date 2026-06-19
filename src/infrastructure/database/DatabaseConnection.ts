@@ -31,8 +31,7 @@ export class DatabaseConnection {
       this.isPostgres = true;
     } else {
       const envPath = process.env.SQLITE_DB_PATH;
-      const dbPath =
-        envPath !== undefined && envPath !== '' ? envPath : path.resolve(__dirname, '../../../ecotrack.db');
+      const dbPath = envPath ?? path.resolve(__dirname, '../../../ecotrack.db');
       const sqlite = sqlite3.verbose();
       this.sqliteDb = new sqlite.Database(dbPath);
       this.isPostgres = false;
@@ -49,6 +48,8 @@ export class DatabaseConnection {
       try {
         if (existsSync(schemaFile)) {
           schemaSql = await readFile(schemaFile, 'utf8');
+        } else {
+          schemaSql = this.getDefaultSchemaSql();
         }
       } catch {
         schemaSql = this.getDefaultSchemaSql();
@@ -218,10 +219,7 @@ export class DatabaseConnection {
             (process.env.SEED_DEV_PASSWORD_HASH ??
             `$argon2id-dev$${Buffer.from(crypto.randomBytes(32)).toString('base64')}`));
 
-      if (
-        (process.env.SEED_USER_PASSWORD_HASH === undefined || process.env.SEED_USER_PASSWORD_HASH === '') &&
-        process.env.NODE_ENV === 'production'
-      ) {
+      if ((process.env.SEED_USER_PASSWORD_HASH ?? '') === '' && process.env.NODE_ENV === 'production') {
         /* eslint-disable-next-line no-console */
         console.warn(
           '[EcoTrack AI] WARNING: SEED_USER_PASSWORD_HASH not set in production. Default user account is locked with a random password and cannot be used. Set SEED_USER_PASSWORD_HASH to an Argon2id hash to enable login.',

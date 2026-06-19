@@ -12,7 +12,7 @@ describe('AiCoachService Unit Tests', () => {
     points: 120,
     level: 'Sapling',
     streak: 5,
-    createdAt: new Date()
+    createdAt: new Date(),
   };
 
   const mockActivities: Activity[] = [
@@ -26,7 +26,7 @@ describe('AiCoachService Unit Tests', () => {
       co2Emissions: 18.0,
       timestamp: new Date(),
       isRecurring: false,
-      recurrencePeriod: 'none'
+      recurrencePeriod: 'none',
     },
     {
       id: 2,
@@ -38,8 +38,8 @@ describe('AiCoachService Unit Tests', () => {
       co2Emissions: 5.8,
       timestamp: new Date(),
       isRecurring: false,
-      recurrencePeriod: 'none'
-    }
+      recurrencePeriod: 'none',
+    },
   ];
 
   it('should respond to greetings with personalized user stats', () => {
@@ -76,7 +76,7 @@ describe('AiCoachService Unit Tests', () => {
     const response = AiCoachService.chat('I logged a petrol car drive, I feel bad', mockUser, mockActivities);
     // Tone check: Ensure no guilt words are used
     const guiltWords = ['guilty', 'shame', 'bad job', 'disappointing', 'failed'];
-    guiltWords.forEach(word => {
+    guiltWords.forEach((word) => {
       expect(response.reply.toLowerCase()).not.toContain(word);
     });
     // Check that positive encouragement is used
@@ -88,13 +88,13 @@ describe('AiCoachService Unit Tests', () => {
     const insights = AiCoachService.getWeeklyInsights(mockUser, mockActivities);
     expect(insights.length).toBeGreaterThan(0);
     // User has streak >= 3
-    expect(insights.some(i => i.includes('streak'))).toBe(true);
+    expect(insights.some((i) => i.includes('streak'))).toBe(true);
   });
 
   it('should provide tracking encouragement for zero-streak user', () => {
     const zeroStreakUser: User = { ...mockUser, streak: 0 };
     const insights = AiCoachService.getWeeklyInsights(zeroStreakUser, mockActivities);
-    expect(insights.some(i => i.includes('daily') || i.includes('Log') || i.includes('habit'))).toBe(true);
+    expect(insights.some((i) => i.includes('daily') || i.includes('Log') || i.includes('habit'))).toBe(true);
   });
 
   it('should return a default reply for unrecognized queries', () => {
@@ -106,7 +106,9 @@ describe('AiCoachService Unit Tests', () => {
 
   it('should return welcome insight when activities list is empty', () => {
     const insights = AiCoachService.getWeeklyInsights(mockUser, []);
-    expect(insights).toEqual(['Welcome! Start logging your transportation, food, shopping, and home energy to unlock personalized insights.']);
+    expect(insights).toEqual([
+      'Welcome! Start logging your transportation, food, shopping, and home energy to unlock personalized insights.',
+    ]);
   });
 
   it('should flag high food emissions when foodEmissions > 20', () => {
@@ -121,11 +123,11 @@ describe('AiCoachService Unit Tests', () => {
         co2Emissions: 25.0,
         timestamp: new Date(),
         isRecurring: false,
-        recurrencePeriod: 'none'
-      }
+        recurrencePeriod: 'none',
+      },
     ];
     const insights = AiCoachService.getWeeklyInsights(mockUser, highFoodActivities);
-    expect(insights.some(i => i.includes('Food emissions are relatively high'))).toBe(true);
+    expect(insights.some((i) => i.includes('Food emissions are relatively high'))).toBe(true);
   });
 
   it('should respond to stats queries with empty activities list', () => {
@@ -137,7 +139,7 @@ describe('AiCoachService Unit Tests', () => {
   it('should respond to stats queries with positive emissions', () => {
     const response = AiCoachService.chat('show my footprint scorecard and statistics', mockUser, mockActivities);
     expect(response.reply).toContain('I have analyzed your footprint!');
-    expect(response.insights.some(i => i.includes('Sapling'))).toBe(true);
+    expect(response.insights.some((i) => i.includes('Sapling'))).toBe(true);
     expect(response.insights.length).toBeGreaterThan(0);
   });
 
@@ -150,15 +152,33 @@ describe('AiCoachService Unit Tests', () => {
 
   it('should cover zero emission branches for transport, food, and energy queries', () => {
     const responseTrans = AiCoachService.chat('transport', mockUser, []);
-    expect(responseTrans.insights.some(i => i.includes('0%'))).toBe(true);
+    expect(responseTrans.insights.some((i) => i.includes('0%'))).toBe(true);
 
     const responseFood = AiCoachService.chat('food', mockUser, []);
-    expect(responseFood.insights.some(i => i.includes('0%'))).toBe(true);
+    expect(responseFood.insights.some((i) => i.includes('0%'))).toBe(true);
 
     const responseEnergy = AiCoachService.chat('energy', mockUser, []);
-    expect(responseEnergy.insights.some(i => i.includes('0%'))).toBe(true);
+    expect(responseEnergy.insights.some((i) => i.includes('0%'))).toBe(true);
+  });
+
+  it('should ignore non-food and non-transport activities in weekly insights category totals', () => {
+    const energyActivity: Activity = {
+      id: 9,
+      userId: 1,
+      category: 'energy',
+      subcategory: 'electricity',
+      quantity: 50,
+      unit: 'kWh',
+      co2Emissions: 19.0,
+      timestamp: new Date(),
+      isRecurring: false,
+      recurrencePeriod: 'none',
+    };
+    const insights = AiCoachService.getWeeklyInsights(mockUser, [energyActivity]);
+    expect(insights.length).toBeGreaterThan(0);
+    // Since transportEmissions and foodEmissions are both 0, it shouldn't log any high transport/food tips.
+    expect(insights.some((i) => i.includes('transportation emissions') || i.includes('Food emissions'))).toBe(false);
   });
 });
 
 export default {};
-

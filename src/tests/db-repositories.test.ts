@@ -487,6 +487,21 @@ describe('Repositories Integration & Postgres Paths', () => {
       expect(ch).toBeNull();
     });
 
+    it('listAll caches results and findById retrieves from cache', async () => {
+      const repo = new ChallengeRepository(db);
+      const challenges = await repo.listAll();
+      expect(challenges.length).toBeGreaterThan(0);
+
+      // Trigger cache miss on loaded cache (covers find callback returning false, and cached check false)
+      const chNull = await repo.findById(999999);
+      expect(chNull).toBeNull();
+
+      // Now findById should retrieve from cache (hits the cached check branch)
+      const firstCached = challenges[0]!;
+      const ch = await repo.findById(firstCached.id);
+      expect(ch).toEqual(firstCached);
+    });
+
     it('updateChallengeProgress completed path uses correct timestamps for PG vs SQLite', async () => {
       const mockDbConnectionPG = {
         getIsPostgres: () => true,
@@ -715,9 +730,9 @@ describe('Repositories Integration & Postgres Paths', () => {
         email: 'fallback@test.com',
         username: 'user',
         password_hash: 'hash',
-        points: 0,
+        points: null as any,
         level: null as any,
-        streak: 0,
+        streak: null as any,
         created_at: new Date().toISOString(),
       };
       const mockDbConnection = {
@@ -726,7 +741,9 @@ describe('Repositories Integration & Postgres Paths', () => {
       } as any;
       const repo = new UserRepository(mockDbConnection);
       const user = await repo.findById(1);
+      expect(user!.points).toBe(0);
       expect(user!.level).toBe('Seedling');
+      expect(user!.streak).toBe(0);
     });
 
     it('ActivityRepository - getDailyEmissionsSummary in Postgres mode uses TO_CHAR', async () => {
@@ -863,6 +880,82 @@ describe('Repositories Integration & Postgres Paths', () => {
       mockDbConnection.query = vi.fn().mockResolvedValue([{ log_date: '2026-06-19', total_emissions: null }]);
       const daily = await repo.getDailyEmissionsSummary(1, new Date(), new Date());
       expect(daily[0]!.totalEmissions).toBe(0);
+    });
+
+    it('ActivityRepository - findByUserId with search query less than 2 characters should trigger 1=0 query path', async () => {
+      const repo = new ActivityRepository(db);
+      const res = await repo.findByUserId(1, { search: 'a' });
+      expect(res.activities).toEqual([]);
+      expect(res.total).toBe(0);
+    });
+
+    it('DatabaseConnection - initializeSchema should catch read error and fallback to default schema', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const schemaFile = path.resolve(__dirname, '../infrastructure/persistence/schema.sql');
+      const backupPath = `${schemaFile}.bak`;
+      let hasBackup = false;
+
+      if (fs.existsSync(schemaFile)) {
+        fs.renameSync(schemaFile, backupPath);
+        hasBackup = true;
+      }
+
+      // Create a directory at schemaFile path to force readFile to throw EISDIR
+      fs.mkdirSync(schemaFile);
+
+      try {
+        const dbErr = new DatabaseConnection();
+        await dbErr.initializeSchema();
+        await dbErr.close();
+      } finally {
+        fs.rmdirSync(schemaFile);
+        if (hasBackup) {
+          fs.renameSync(backupPath, schemaFile);
+        }
+      }
+    });
+
+    it('DatabaseConnection - prints warning in production when SEED_USER_PASSWORD_HASH is not set', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const oldEnv = process.env.NODE_ENV;
+      const oldHash = process.env.SEED_USER_PASSWORD_HASH;
+
+      process.env.NODE_ENV = 'production';
+      delete process.env.SEED_USER_PASSWORD_HASH;
+
+      const dbMock = new DatabaseConnection();
+      const querySpy = vi.spyOn(dbMock, 'query').mockImplementation(async (sql) => {
+        if (sql.includes('SELECT COUNT(*)')) {
+          return [{ count: 0 }];
+        }
+        return [];
+      });
+
+      await (dbMock as any).seedChallengesAndBadges();
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('SEED_USER_PASSWORD_HASH not set in production'),
+      );
+
+      querySpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+      process.env.NODE_ENV = oldEnv;
+      if (oldHash) {
+        process.env.SEED_USER_PASSWORD_HASH = oldHash;
+      }
+      await dbMock.close();
+    });
+
+    it('DatabaseConnection - constructor falls back to default ecotrack.db path if SQLITE_DB_PATH is not set', async () => {
+      const oldDbPath = process.env.SQLITE_DB_PATH;
+      delete process.env.SQLITE_DB_PATH;
+
+      const dbMock = new DatabaseConnection();
+      expect((dbMock as any).isPostgres).toBe(false);
+      await dbMock.close();
+
+      process.env.SQLITE_DB_PATH = oldDbPath;
     });
 
     it('ChallengeRepository - covers mapRowToChallenge and mapRowToUserChallenge string values', async () => {

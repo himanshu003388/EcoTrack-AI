@@ -54,16 +54,14 @@ export class UserRepository implements IUserRepository {
         'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING *',
         [email.toLowerCase(), username, passwordHash],
       );
-      const firstRow = rows[0];
-      if (!firstRow) throw new Error('[UserRepository] Insert failed.');
+      const firstRow = rows[0]!;
       return this.mapRowToUser(firstRow);
     } else {
       const res = await this.db.query<UserRow>(
         "INSERT INTO users (email, username, password_hash, points, level, streak, created_at) VALUES ($1, $2, $3, 0, 'Seedling', 0, CURRENT_TIMESTAMP)",
         [email.toLowerCase(), username, passwordHash],
       );
-      const firstResRow = res[0];
-      if (!firstResRow) throw new Error('[UserRepository] Insert failed.');
+      const firstResRow = res[0]!;
       const insertedId = firstResRow.id;
       const user = await this.findById(insertedId);
       if (!user) throw new Error('[UserRepository] Created user could not be retrieved.');

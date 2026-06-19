@@ -97,7 +97,7 @@ function sanitizeData(data: unknown): unknown {
 }
 
 export function xssSanitizer(req: Request, _res: Response, next: NextFunction): void {
-  if (req.body !== undefined && req.body !== null) {
+  if (req.body !== undefined) {
     req.body = sanitizeData(req.body);
   }
   req.query = sanitizeData(req.query) as typeof req.query;

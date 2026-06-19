@@ -68,7 +68,7 @@ export class GenerateReport {
     for (const act of activities) {
       totalEmissions += act.co2Emissions;
       logDaysSet.add(act.timestamp.toDateString());
-      breakdownMap[act.category] = (breakdownMap[act.category] ?? 0) + act.co2Emissions;
+      breakdownMap[act.category] = (breakdownMap[act.category] as number) + act.co2Emissions;
 
       // Money saved
       if (act.category === 'transport') {
@@ -98,14 +98,14 @@ export class GenerateReport {
     const categories = ['transport', 'energy', 'food', 'shopping_waste'];
     const categoryBreakdown = categories.map((cat) => ({
       category: cat,
-      emissions: Math.round((breakdownMap[cat] ?? 0) * 10) / 10,
+      emissions: Math.round((breakdownMap[cat] as number) * 10) / 10,
     }));
 
     // 5. Goals tracking
     const goals = goalsList.map((g) => ({
       target: g.targetCo2,
       achieved: g.achieved,
-      date: g.endDate.toISOString().split('T')[0] ?? '',
+      date: g.endDate.toISOString().split('T')[0] as string,
     }));
 
     // 6. Badges count

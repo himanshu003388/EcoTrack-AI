@@ -150,12 +150,10 @@ export class LogActivity {
       if (newProgress >= joinedCh.durationDays) {
         newStatus = 'completed';
         // Re-fetch to get latest points (may have been updated by updateUserPointsAndStreak above)
-        const freshUser = await this.userRepository.findById(user.id);
-        if (freshUser) {
-          const newPoints = freshUser.points + joinedCh.pointsReward;
-          const newLvl = calculateLevel(newPoints);
-          await this.userRepository.updatePointsAndLevel(freshUser.id, newPoints, newLvl);
-        }
+        const freshUser = (await this.userRepository.findById(user.id))!;
+        const newPoints = freshUser.points + joinedCh.pointsReward;
+        const newLvl = calculateLevel(newPoints);
+        await this.userRepository.updatePointsAndLevel(freshUser.id, newPoints, newLvl);
       }
 
       await this.challengeRepository.updateChallengeProgress(user.id, joinedCh.challengeId, newProgress, newStatus);

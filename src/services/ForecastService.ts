@@ -110,7 +110,8 @@ export class ForecastService {
       trendPercentage = Math.round(((recentEmissions - priorEmissions) / priorEmissions) * 100 * 10) / 10;
       if (trendPercentage > TREND_THRESHOLD_PCT) {
         trendDirection = 'increasing';
-      } else if (trendPercentage < -TREND_THRESHOLD_PCT) {
+      }
+      if (trendPercentage < -TREND_THRESHOLD_PCT) {
         trendDirection = 'decreasing';
       }
     }

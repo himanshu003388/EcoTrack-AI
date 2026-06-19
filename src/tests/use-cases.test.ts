@@ -228,6 +228,25 @@ describe('LogActivity use case', () => {
     });
     expect(mockUserRepo.updateStreak).toHaveBeenCalledWith(1, 1);
   });
+
+  it('should not update user points or streak if user is not found', async () => {
+    const userRepoNoUser = {
+      ...mockUserRepo,
+      findById: vi.fn().mockResolvedValue(null),
+      updatePointsAndLevel: vi.fn(),
+      updateStreak: vi.fn(),
+    };
+    const logActivity = new LogActivity(mockActivityRepo, userRepoNoUser, mockChallengeRepo);
+    const result = await logActivity.execute({
+      userId: 999,
+      category: 'transport',
+      subcategory: 'car_petrol',
+      quantity: 10,
+      unit: 'km',
+    });
+    expect(result).toBeDefined();
+    expect(userRepoNoUser.updatePointsAndLevel).not.toHaveBeenCalled();
+  });
 });
 
 describe('GetActivities use case', () => {
@@ -373,6 +392,32 @@ describe('GetDashboardData use case', () => {
     const getDashboard = new GetDashboardData(mockActivityRepo, mockUserRepoNoUser, mockGoalRepo);
     await expect(getDashboard.execute(1)).rejects.toThrow('User not found.');
   });
+
+  it('should compile dashboard data when activities are logged today and this week', async () => {
+    clearDashboardCache(1);
+    const today = new Date();
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+
+    const mockActRepoTime = {
+      ...mockActivityRepo,
+      findByUserId: vi.fn().mockResolvedValue({
+        activities: [
+          makeActivity({ co2Emissions: 10, timestamp: today }),
+          makeActivity({ co2Emissions: 5, timestamp: threeDaysAgo }),
+          makeActivity({ co2Emissions: 20, timestamp: tenDaysAgo }),
+        ],
+        total: 3,
+      }),
+      getCategorySummary: vi.fn().mockResolvedValue([]),
+      getDailyEmissionsSummary: vi.fn().mockResolvedValue([]),
+    };
+    const getDashboard = new GetDashboardData(mockActRepoTime, mockUserRepo, mockGoalRepo);
+    const result = await getDashboard.execute(1);
+    expect(result.emissions.today).toBe(10);
+    expect(result.emissions.weekly).toBe(15);
+    expect(result.emissions.monthly).toBe(35);
+  });
 });
 
 describe('GetForecast use case', () => {
@@ -468,44 +513,38 @@ describe('GetRecommendations use case', () => {
 
 describe('ManageChallenges use case', () => {
   const mockChallengeRepo: IChallengeRepository = {
-    listAll: vi
-      .fn()
-      .mockResolvedValue([
-        {
-          id: 1,
-          title: 'Test Challenge',
-          category: 'transport',
-          description: 'Desc',
-          pointsReward: 50,
-          co2Target: 20,
-          durationDays: 7,
-        },
-      ]),
-    findById: vi
-      .fn()
-      .mockResolvedValue({
+    listAll: vi.fn().mockResolvedValue([
+      {
         id: 1,
-        title: 'Test',
+        title: 'Test Challenge',
         category: 'transport',
         description: 'Desc',
         pointsReward: 50,
         co2Target: 20,
         durationDays: 7,
-      }),
+      },
+    ]),
+    findById: vi.fn().mockResolvedValue({
+      id: 1,
+      title: 'Test',
+      category: 'transport',
+      description: 'Desc',
+      pointsReward: 50,
+      co2Target: 20,
+      durationDays: 7,
+    }),
     getUserChallenges: vi.fn().mockResolvedValue([]),
     getUserChallenge: vi.fn().mockResolvedValue(null),
     joinChallenge: vi
       .fn()
       .mockResolvedValue({ userId: 1, challengeId: 1, status: 'active' as const, progress: 0, startedAt: new Date() }),
-    updateChallengeProgress: vi
-      .fn()
-      .mockResolvedValue({
-        userId: 1,
-        challengeId: 1,
-        status: 'completed' as const,
-        progress: 7,
-        startedAt: new Date(),
-      }),
+    updateChallengeProgress: vi.fn().mockResolvedValue({
+      userId: 1,
+      challengeId: 1,
+      status: 'completed' as const,
+      progress: 7,
+      startedAt: new Date(),
+    }),
   };
   const mockUserRepo: IUserRepository = {
     findByEmail: vi.fn(),
@@ -540,15 +579,13 @@ describe('ManageChallenges use case', () => {
   it('should complete a challenge', async () => {
     const repoWithJoined = {
       ...mockChallengeRepo,
-      getUserChallenge: vi
-        .fn()
-        .mockResolvedValue({
-          userId: 1,
-          challengeId: 1,
-          status: 'active' as const,
-          progress: 3,
-          startedAt: new Date(),
-        }),
+      getUserChallenge: vi.fn().mockResolvedValue({
+        userId: 1,
+        challengeId: 1,
+        status: 'active' as const,
+        progress: 3,
+        startedAt: new Date(),
+      }),
     };
     const manage = new ManageChallenges(repoWithJoined, mockUserRepo);
     const result = await manage.complete(1, 1);
@@ -563,15 +600,13 @@ describe('ManageChallenges use case', () => {
   it('should return challenge if already completed', async () => {
     const repoWithCompleted = {
       ...mockChallengeRepo,
-      getUserChallenge: vi
-        .fn()
-        .mockResolvedValue({
-          userId: 1,
-          challengeId: 1,
-          status: 'completed' as const,
-          progress: 7,
-          startedAt: new Date(),
-        }),
+      getUserChallenge: vi.fn().mockResolvedValue({
+        userId: 1,
+        challengeId: 1,
+        status: 'completed' as const,
+        progress: 7,
+        startedAt: new Date(),
+      }),
     };
     const manage = new ManageChallenges(repoWithCompleted, mockUserRepo);
     const result = await manage.complete(1, 1);
@@ -581,15 +616,13 @@ describe('ManageChallenges use case', () => {
   it('should throw error when completing a joined challenge where the challenge details are missing', async () => {
     const repoWithMissingDetails = {
       ...mockChallengeRepo,
-      getUserChallenge: vi
-        .fn()
-        .mockResolvedValue({
-          userId: 1,
-          challengeId: 1,
-          status: 'active' as const,
-          progress: 3,
-          startedAt: new Date(),
-        }),
+      getUserChallenge: vi.fn().mockResolvedValue({
+        userId: 1,
+        challengeId: 1,
+        status: 'active' as const,
+        progress: 3,
+        startedAt: new Date(),
+      }),
       findById: vi.fn().mockResolvedValue(null),
     };
     const manage = new ManageChallenges(repoWithMissingDetails, mockUserRepo);
@@ -599,15 +632,13 @@ describe('ManageChallenges use case', () => {
   it('should complete challenge successfully even when user is not found', async () => {
     const repoWithJoined = {
       ...mockChallengeRepo,
-      getUserChallenge: vi
-        .fn()
-        .mockResolvedValue({
-          userId: 1,
-          challengeId: 1,
-          status: 'active' as const,
-          progress: 3,
-          startedAt: new Date(),
-        }),
+      getUserChallenge: vi.fn().mockResolvedValue({
+        userId: 1,
+        challengeId: 1,
+        status: 'active' as const,
+        progress: 3,
+        startedAt: new Date(),
+      }),
     };
     const userRepoWithNoUser = {
       ...mockUserRepo,
@@ -712,5 +743,26 @@ describe('GenerateReport use case', () => {
     const generate = new GenerateReport(mockActivityRepo, mockUserRepo, mockGoalRepo, mockDbEmpty);
     const result = await generate.execute(1);
     expect(result.badgesCount).toBe(0);
+  });
+
+  it('should compile report when user has goals target', async () => {
+    clearReportCache(1);
+    const mockGoalRepoWithGoal = {
+      ...mockGoalRepo,
+      listGoals: vi.fn().mockResolvedValue([
+        {
+          id: 1,
+          userId: 1,
+          targetCo2: 150,
+          startDate: new Date(),
+          endDate: new Date(),
+          achieved: false,
+        },
+      ]),
+    };
+    const generate = new GenerateReport(mockActivityRepo, mockUserRepo, mockGoalRepoWithGoal, mockDb);
+    const result = await generate.execute(1);
+    expect(result.goals.length).toBe(1);
+    expect(result.goals[0]!.target).toBe(150);
   });
 });

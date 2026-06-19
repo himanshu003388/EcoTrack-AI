@@ -42,8 +42,8 @@ export class EmissionCalculator {
    * @returns Emissions in kg CO2e, rounded to 4 decimal places. Returns 0 for unknown factors.
    */
   static calculate(category: keyof EmissionFactorsSchema, subcategory: string, quantity: number): number {
-    if (!(category in factors)) return 0;
-    const categoryFactors = factors[category];
+    const categoryFactors = factors[category] as EmissionCategoryFactors | undefined;
+    if (categoryFactors === undefined) return 0;
     const factor = categoryFactors[subcategory];
     if (factor === undefined) return 0;
     const emissions = quantity * factor.value;
@@ -58,8 +58,9 @@ export class EmissionCalculator {
    * @returns The EmissionFactor object, or `null` if the subcategory is unknown.
    */
   static getFactorInfo(category: keyof EmissionFactorsSchema, subcategory: string): EmissionFactor | null {
-    if (!(category in factors)) return null;
-    return factors[category][subcategory] ?? null;
+    const categoryFactors = factors[category] as EmissionCategoryFactors | undefined;
+    if (categoryFactors === undefined) return null;
+    return categoryFactors[subcategory] ?? null;
   }
 
   /**
@@ -69,8 +70,8 @@ export class EmissionCalculator {
    * @returns An object mapping subcategory names to their EmissionFactor. Empty object if category is unknown.
    */
   static getCategoryFactors(category: keyof EmissionFactorsSchema): EmissionCategoryFactors {
-    if (!(category in factors)) return {};
-    return factors[category];
+    const categoryFactors = factors[category] as EmissionCategoryFactors | undefined;
+    return categoryFactors ?? {};
   }
 
   /**

@@ -3,15 +3,24 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
 export let sessionFallbackSecret: string | undefined;
-if (process.env.NODE_ENV === 'test') {
+
+if (process.env.NODE_ENV === 'production') {
+  if ((process.env.JWT_SECRET ?? '') === '') {
+    throw new Error('JWT_SECRET must be set in production');
+  }
+} else {
   const envSecret = process.env.JWT_SECRET;
-  sessionFallbackSecret =
-    envSecret !== undefined && envSecret !== '' ? envSecret : crypto.randomBytes(32).toString('hex');
-} else if (process.env.JWT_SECRET === undefined || process.env.JWT_SECRET === '') {
+  sessionFallbackSecret = (envSecret ?? '') !== '' ? envSecret : crypto.randomBytes(32).toString('hex');
+}
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if ((secret ?? '') !== '') return secret!;
   if (process.env.NODE_ENV === 'production') {
     throw new Error('JWT_SECRET must be set in production');
   }
-  sessionFallbackSecret = crypto.randomBytes(32).toString('hex');
+  sessionFallbackSecret ??= crypto.randomBytes(32).toString('hex');
+  return sessionFallbackSecret;
 }
 
 /** Augmented Express Request that carries the authenticated user's identity. */
@@ -50,14 +59,7 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const secret =
-      process.env.JWT_SECRET !== undefined && process.env.JWT_SECRET !== ''
-        ? process.env.JWT_SECRET
-        : sessionFallbackSecret;
-    if (secret === undefined || secret === '') {
-      res.status(500).json({ error: 'Authentication service is not properly configured.' });
-      return;
-    }
+    const secret = getJwtSecret();
     const decoded = jwt.verify(token, secret) as { id: number; email: string; username: string };
     req.user = {
       id: decoded.id,
@@ -65,7 +67,11 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
       username: decoded.username,
     };
     next();
-  } catch {
-    res.status(403).json({ error: 'Invalid or expired authentication token.' });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === 'JWT_SECRET must be set in production') {
+      res.status(500).json({ error: 'Authentication service is not properly configured.' });
+    } else {
+      res.status(403).json({ error: 'Invalid or expired authentication token.' });
+    }
   }
 }

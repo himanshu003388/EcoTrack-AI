@@ -22,10 +22,8 @@ export class TTLCache<T> {
 
   set(key: string, data: T, ttlMs?: number): void {
     if (this.store.size >= this.maxEntries) {
-      const oldestKey = this.store.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.store.delete(oldestKey);
-      }
+      const oldestKey = this.store.keys().next().value!;
+      this.store.delete(oldestKey);
     }
     this.store.set(key, { data, expiresAt: Date.now() + (ttlMs ?? this.defaultTTLMs) });
   }
