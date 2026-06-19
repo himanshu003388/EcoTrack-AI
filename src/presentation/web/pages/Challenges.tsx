@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../main';
+import { useAuth, AppUser } from '../main';
 import { useToast } from '../components/Toast';
 import { Trophy, Award, Plus, Flame, Zap, Sprout, Shield, Crown } from 'lucide-react';
 import { CardSkeleton } from '../components/Skeleton';
@@ -36,17 +36,18 @@ export const Challenges: React.FC = () => {
   const [joined, setJoined] = useState<JoinedChallenge[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchChallengesAndBadges = async () => {
+  const fetchChallengesAndBadges = async (): Promise<void> => {
     try {
       const chRes = await fetch('/api/challenges', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (chRes.ok) {
-        const json = await chRes.json();
+        const json = (await chRes.json()) as { challenges: ChallengeItem[]; joined: JoinedChallenge[] };
         setChallenges(json.challenges);
         setJoined(json.joined);
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Failed to load challenges:', err);
     } finally {
       setLoading(false);
@@ -54,62 +55,62 @@ export const Challenges: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchChallengesAndBadges();
+    void fetchChallengesAndBadges();
   }, [token]);
 
-  const handleJoin = async (id: number) => {
+  const handleJoin = async (id: number): Promise<void> => {
     try {
       const res = await fetch(`/api/challenges/${id}/join`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (res.ok) {
         toast('success', 'Enrolled in challenge successfully! Track activities matching this category.');
-        fetchChallengesAndBadges();
+        void fetchChallengesAndBadges();
       } else {
         toast('error', data.error || 'Failed to join challenge.');
       }
-    } catch (err) {
+    } catch {
       toast('error', 'Failed to join challenge.');
     }
   };
 
-  const handleComplete = async (id: number) => {
+  const handleComplete = async (id: number): Promise<void> => {
     try {
       const res = await fetch(`/api/challenges/${id}/complete`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (res.ok) {
         toast('success', 'Congratulations! Challenge completed and points awarded.');
-        confetti({
+        void confetti({
           particleCount: 120,
           spread: 80,
           origin: { y: 0.7 },
           colors: ['#8b5cf6', '#10b981', '#f59e0b', '#38bdf8']
         });
-        refreshUser();
-        fetchChallengesAndBadges();
+        void refreshUser();
+        void fetchChallengesAndBadges();
       } else {
         toast('error', data.error || 'Failed to complete challenge.');
       }
-    } catch (err) {
+    } catch {
       toast('error', 'Failed to complete challenge.');
     }
   };
 
   const badgeCabinet = [
-    { id: 1, name: 'First Footprint', desc: 'Log your first carbon activity', icon: Sprout, iconColor: 'text-emerald-500', check: (u: any) => u.points >= 10 },
-    { id: 2, name: 'Consistent Tracker', desc: 'Maintain a 3-day log streak', icon: Flame, iconColor: 'text-amber-500', check: (u: any) => u.streak >= 3 },
-    { id: 3, name: 'Streak Veteran', desc: 'Maintain a 7-day log streak', icon: Zap, iconColor: 'text-yellow-500', check: (u: any) => u.streak >= 7 },
-    { id: 4, name: 'Sapling Status', desc: 'Reach the Sapling XP level', icon: Sprout, iconColor: 'text-forest-500', check: (u: any) => u.points >= 101 },
-    { id: 5, name: 'Green Activist', desc: 'Earn 500 environmental points', icon: Shield, iconColor: 'text-emerald-600', check: (u: any) => u.points >= 500 },
-    { id: 6, name: 'Climate Champion', desc: 'Reach Climate Hero status', icon: Crown, iconColor: 'text-purple-500', check: (u: any) => u.points >= 1001 }
+    { id: 1, name: 'First Footprint', desc: 'Log your first carbon activity', icon: Sprout, iconColor: 'text-emerald-500', check: (u: AppUser): boolean => u.points >= 10 },
+    { id: 2, name: 'Consistent Tracker', desc: 'Maintain a 3-day log streak', icon: Flame, iconColor: 'text-amber-500', check: (u: AppUser): boolean => u.streak >= 3 },
+    { id: 3, name: 'Streak Veteran', desc: 'Maintain a 7-day log streak', icon: Zap, iconColor: 'text-yellow-500', check: (u: AppUser): boolean => u.streak >= 7 },
+    { id: 4, name: 'Sapling Status', desc: 'Reach the Sapling XP level', icon: Sprout, iconColor: 'text-forest-500', check: (u: AppUser): boolean => u.points >= 101 },
+    { id: 5, name: 'Green Activist', desc: 'Earn 500 environmental points', icon: Shield, iconColor: 'text-emerald-600', check: (u: AppUser): boolean => u.points >= 500 },
+    { id: 6, name: 'Climate Champion', desc: 'Reach Climate Hero status', icon: Crown, iconColor: 'text-purple-500', check: (u: AppUser): boolean => u.points >= 1001 }
   ];
 
-  const getNextLevelInfo = (points: number) => {
+  const getNextLevelInfo = (points: number): { next: string; needed: number; progress: number } => {
     if (points >= 1001) return { next: 'Climate Hero (Max)', needed: 0, progress: 100 };
     if (points >= 601) return { next: 'Climate Hero', needed: 1001 - points, progress: Math.round(((points - 600) / 400) * 100) };
     if (points >= 301) return { next: 'Forest Guardian', needed: 601 - points, progress: Math.round(((points - 300) / 300) * 100) };
@@ -215,7 +216,7 @@ export const Challenges: React.FC = () => {
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Reward: +{ch.pointsReward} XP</span>
                     <button
-                      onClick={() => handleComplete(ch.challengeId)}
+                      onClick={() => { void handleComplete(ch.challengeId); }}
                       className="px-3.5 py-1.5 bg-forest-500 hover:bg-forest-600 text-white rounded-xl text-xs font-bold transition-colors shadow-sm shadow-forest-500/10"
                       aria-label={`Complete challenge: ${ch.title}`}
                     >
@@ -250,7 +251,7 @@ export const Challenges: React.FC = () => {
                     <span>{ch.durationDays} days</span>
                   </div>
                   <button
-                    onClick={() => handleJoin(ch.id)}
+                    onClick={() => { void handleJoin(ch.id); }}
                     className="p-2 bg-slate-50 dark:bg-forest-800 hover:bg-forest-50 dark:hover:bg-forest-700 text-forest-600 dark:text-forest-400 border border-slate-100 dark:border-forest-700 rounded-xl hover:border-forest-200 dark:hover:border-forest-600 transition-colors flex items-center justify-center"
                     aria-label={`Enrol in challenge: ${ch.title}`}
                   >

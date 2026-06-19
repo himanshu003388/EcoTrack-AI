@@ -19,7 +19,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  render() {
+  render(): React.ReactNode {
     if (this.state.hasError) {
       return (
         <div className="flex h-screen w-screen items-center justify-center bg-slate-50" role="alert">

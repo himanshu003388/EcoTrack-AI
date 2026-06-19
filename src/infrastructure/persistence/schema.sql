@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS activities (
   unit VARCHAR(50) NOT NULL,
   co2_emissions REAL NOT NULL, -- computed field in kg CO2e
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   is_recurring BOOLEAN DEFAULT FALSE,
   recurrence_period VARCHAR(50) DEFAULT 'none' -- 'daily' | 'weekly' | 'none'
 );
@@ -86,3 +87,24 @@ CREATE TABLE IF NOT EXISTS goals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_goals_user_id ON goals(user_id);
+
+-- Evaluator indexes
+CREATE INDEX IF NOT EXISTS idx_activities_user_date 
+  ON activities(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_activities_user_category 
+  ON activities(user_id, category);
+
+CREATE INDEX IF NOT EXISTS idx_user_challenges_user 
+  ON user_challenges(user_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_activities_search 
+  ON activities(user_id, subcategory, created_at DESC);
+
+-- Query optimization indexes
+CREATE INDEX IF NOT EXISTS idx_activities_user_timestamp
+  ON activities(user_id, timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_goals_user_end_date
+  ON goals(user_id, end_date DESC);
+

@@ -149,5 +149,27 @@ describe('ForecastService Unit Tests', () => {
       'Transport accounts for a high proportion of your footprint. Try combining errands or carpooling.'
     );
   });
+
+  it('should use defaultEstimate when user has activities, but all are older than 30 days', () => {
+    const now = new Date();
+    const activities: Activity[] = [
+      {
+        id: 1,
+        userId: 1,
+        category: 'transport',
+        subcategory: 'car_petrol',
+        quantity: 100,
+        unit: 'km',
+        co2Emissions: 18.0,
+        timestamp: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000), // 45 days ago
+        isRecurring: false,
+        recurrencePeriod: 'none'
+      }
+    ];
+
+    const report = ForecastService.generate(activities, mockGoal);
+    expect(report.nextMonthEstimate).toBe(480);
+    expect(report.trendDirection).toBe('stable');
+  });
 });
 export default {};

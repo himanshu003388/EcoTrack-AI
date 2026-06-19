@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { SimpleActionService } from '../services/SimpleActionService';
-import type { Activity, ActivityCategory } from '../domain/entities/Activity';
+import type { Activity } from '../domain/entities/Activity';
 
 const makeActivity = (overrides: Partial<Activity>): Activity => ({
   id: 1,
   userId: 1,
-  category: 'transport' as ActivityCategory,
+  category: 'transport',
   subcategory: 'car_petrol',
   quantity: 10,
   unit: 'km',

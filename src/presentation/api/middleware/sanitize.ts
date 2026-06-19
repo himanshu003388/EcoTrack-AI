@@ -34,7 +34,7 @@ function sanitizeData(data: unknown): unknown {
   }
   if (data !== null && typeof data === 'object') {
     const sanitized: Record<string, unknown> = {};
-    for (const key of Object.keys(data as Record<string, unknown>)) {
+    for (const key of Object.keys(data)) {
       sanitized[key] = sanitizeData((data as Record<string, unknown>)[key]);
     }
     return sanitized;

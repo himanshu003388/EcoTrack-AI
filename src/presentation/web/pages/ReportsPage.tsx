@@ -27,13 +27,13 @@ export const ReportsPage: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const fetchReports = useCallback(async () => {
+  const fetchReports = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch('/api/reports', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as ReportSummary;
         setData(json);
       } else {
         throw new Error('Failed to retrieve reports data.');
@@ -46,19 +46,19 @@ export const ReportsPage: React.FC = () => {
   }, [token]);
 
   useEffect(() => {
-    fetchReports();
+    void fetchReports();
   }, [fetchReports]);
 
-  const handlePrint = () => {
+  const handlePrint = (): void => {
     toast('info', 'Opening print dialog...');
     window.print();
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = (): void => {
     if (!data) return;
     setCopied(true);
     const statsText = `EcoTrack AI Carbon Report: I saved ${data.carbonSaved} kg of CO2e and $${data.moneySaved} this month! My log streak is ${data.streak} days. Level: ${data.level}. Track yours at EcoTrackAI.com`;
-    navigator.clipboard.writeText(statsText);
+    void navigator.clipboard.writeText(statsText);
     toast('success', 'Stats copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
   };
@@ -155,7 +155,7 @@ export const ReportsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 dark:divide-forest-800/60">
-                    {data.categoryBreakdown.map((item: any) => {
+                    {data.categoryBreakdown.map((item) => {
                       const sharePct = data.totalEmissions > 0 ? Math.round((item.emissions / data.totalEmissions) * 100) : 0;
                       return (
                         <tr key={item.category}>
@@ -176,7 +176,7 @@ export const ReportsPage: React.FC = () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 italic">No historical target goals set.</p>
               ) : (
                 <div className="border border-slate-100 dark:border-forest-800 rounded-2xl overflow-hidden divide-y divide-slate-50 dark:divide-forest-800/60 text-xs" role="list" aria-label="Goal history">
-                  {data.goals.map((goal: any, i: number) => (
+                  {data.goals.map((goal, i) => (
                     <div key={i} className="p-3 flex justify-between items-center font-semibold" role="listitem">
                       <div className="flex gap-2 items-center">
                         <span className={goal.achieved ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'} aria-label={goal.achieved ? 'Achieved' : 'Not achieved'}>

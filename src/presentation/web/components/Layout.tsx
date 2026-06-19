@@ -32,7 +32,7 @@ const navItems = [
   { name: 'Carbon Reports', to: '/reports', icon: FileBarChart2 },
 ];
 
-function getLevelColor(level: string) {
+function getLevelColor(level: string): string {
   switch (level) {
     case 'Climate Hero': return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700';
     case 'Forest Guardian': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700';
@@ -42,7 +42,7 @@ function getLevelColor(level: string) {
   }
 }
 
-function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
+function SidebarContent({ onNavClick }: { onNavClick?: () => void }): React.ReactElement {
   const { user } = useAuth();
   const location = useLocation();
 
@@ -112,13 +112,13 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
   }, [location.pathname]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && mobileMenuOpen) {
         setMobileMenuOpen(false);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return (): void => document.removeEventListener('keydown', handleKeyDown);
   }, [mobileMenuOpen]);
 
   useEffect(() => {
@@ -127,14 +127,14 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
     } else {
       document.body.style.overflow = '';
     }
-    return () => { document.body.style.overflow = ''; };
+    return (): void => { document.body.style.overflow = ''; };
   }, [mobileMenuOpen]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent): void => {
     touchStartX.current = e.touches[0].clientX;
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: React.TouchEvent): void => {
     if (touchStartX.current > 100) return;
     const diff = e.touches[0].clientX - touchStartX.current;
     if (diff > 80 && !mobileMenuOpen) {
@@ -142,7 +142,7 @@ export const Layout: React.FC<LayoutProps> = memo(({ children }) => {
     }
   };
 
-  const handleDrawerTouchEnd = (e: React.TouchEvent) => {
+  const handleDrawerTouchEnd = (e: React.TouchEvent): void => {
     const diff = e.changedTouches[0].clientX - touchStartX.current;
     if (diff < -80) {
       setMobileMenuOpen(false);

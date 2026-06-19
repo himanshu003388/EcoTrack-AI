@@ -3,8 +3,12 @@ import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { IChallengeRepository } from '../../domain/repositories/IChallengeRepository';
 import { Activity, ActivityCategory } from '../../domain/entities/Activity';
 import { User } from '../../domain/entities/User';
-import { EmissionCalculator, EmissionFactorsSchema } from '../../services/EmissionCalculator';
+import { EmissionCalculator } from '../../services/EmissionCalculator';
 import { calculateLevel } from '../../domain/level';
+import { clearDashboardCache } from './GetDashboardData';
+import { clearForecastCache } from './GetForecast';
+import { clearRecommendationsCache } from './GetRecommendations';
+import { clearReportCache } from './GenerateReport';
 
 /** Input data required to log a new carbon activity. */
 export interface LogActivityInput {
@@ -51,7 +55,7 @@ export class LogActivity {
     }
 
     const factorInfo = EmissionCalculator.getFactorInfo(
-      input.category as keyof EmissionFactorsSchema,
+      input.category,
       input.subcategory
     );
     if (!factorInfo) {
@@ -67,7 +71,7 @@ export class LogActivity {
     }
 
     const co2Emissions = EmissionCalculator.calculate(
-      input.category as keyof EmissionFactorsSchema,
+      input.category,
       input.subcategory,
       input.quantity
     );
@@ -87,9 +91,14 @@ export class LogActivity {
     // Fetch user once and reuse across sub-operations (avoids duplicate DB calls)
     const user = await this.userRepository.findById(input.userId);
     if (user) {
-      const pointsEarned = await this.updateUserPointsAndStreak(user.id, user.points, user.streak);
-      await this.progressActiveChallenges(user, input.category, pointsEarned);
+      await this.updateUserPointsAndStreak(user.id, user.points, user.streak);
+      await this.progressActiveChallenges(user, input.category);
     }
+
+    clearDashboardCache(input.userId);
+    clearForecastCache(input.userId);
+    clearRecommendationsCache(input.userId);
+    clearReportCache(input.userId);
 
     return activity;
   }
@@ -117,8 +126,6 @@ export class LogActivity {
       pointsEarned += STREAK_BONUS_POINTS;
     } else if (streakInfo.currentStreak === 0 && currentStreak > 0) {
       newStreak = 0;
-    } else if (currentStreak === 0 && streakInfo.currentStreak === 1) {
-      newStreak = 1;
     }
 
     const totalPoints = currentPoints + pointsEarned;
@@ -136,12 +143,10 @@ export class LogActivity {
    *
    * @param user - The user entity (passed in to avoid a duplicate DB fetch).
    * @param category - The category of the activity just logged.
-   * @param _pointsEarned - Points earned this session (reserved for future use).
    */
   private async progressActiveChallenges(
     user: User,
-    category: ActivityCategory,
-    _pointsEarned: number
+    category: ActivityCategory
   ): Promise<void> {
     const activeChallenges = await this.challengeRepository.getUserChallenges(user.id);
     const categoryChallenges = activeChallenges.filter(

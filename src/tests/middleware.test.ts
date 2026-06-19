@@ -5,6 +5,7 @@ import { xssSanitizer } from '../presentation/api/middleware/sanitize';
 import { validateSchema } from '../presentation/api/middleware/validate';
 import { LogActivitySchema, ChatSchema } from '../presentation/api/middleware/schemas';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 
 const authSchema = z.object({
   body: z.object({
@@ -47,6 +48,70 @@ describe('Auth middleware', () => {
       username: 'EcoTrack User',
     });
     expect(mockNext).toHaveBeenCalled();
+  });
+
+  it('should pass and set stub user when authorization is dummy-token', () => {
+    const req = mockReq({ authorization: 'Bearer dummy-token' });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+    authenticateToken(req, res, mockNextFn);
+    expect((req as any).user).toEqual({
+      id: 1,
+      email: 'user@ecotrack.ai',
+      username: 'EcoTrack User',
+    });
+    expect(mockNextFn).toHaveBeenCalled();
+  });
+
+  it('should verify and set user from decoded JWT token', () => {
+    const secret = process.env.JWT_SECRET || 'fallback-secret-at-least-32-chars-long!!';
+    const payload = { id: 42, email: 'john@example.com', username: 'john_doe' };
+    const token = jwt.sign(payload, secret);
+    const req = mockReq({ authorization: `Bearer ${token}` });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+    authenticateToken(req, res, mockNextFn);
+    expect((req as any).user).toEqual({
+      id: 42,
+      email: 'john@example.com',
+      username: 'john_doe',
+    });
+    expect(mockNextFn).toHaveBeenCalled();
+  });
+
+  it('should return 403 status code when token is invalid', () => {
+    const req = mockReq({ authorization: 'Bearer invalid-token-string' });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+    authenticateToken(req, res, mockNextFn);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid or expired authentication token.' });
+    expect(mockNextFn).not.toHaveBeenCalled();
+  });
+
+  it('should verify and set user from decoded JWT token when JWT_SECRET is not set in env', () => {
+    const originalSecret = process.env.JWT_SECRET;
+    delete process.env.JWT_SECRET;
+
+    const fallbackSecret = 'fallback-secret-at-least-32-chars-long!!';
+    const payload = { id: 99, email: 'fallback@example.com', username: 'fallback_user' };
+    const token = jwt.sign(payload, fallbackSecret);
+    const req = mockReq({ authorization: `Bearer ${token}` });
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+
+    authenticateToken(req, res, mockNextFn);
+
+    expect((req as any).user).toEqual({
+      id: 99,
+      email: 'fallback@example.com',
+      username: 'fallback_user',
+    });
+    expect(mockNextFn).toHaveBeenCalled();
+
+    if (originalSecret) {
+      process.env.JWT_SECRET = originalSecret;
+    }
   });
 });
 
@@ -219,6 +284,17 @@ describe('Validate middleware', () => {
     const res = mockRes();
     await validateSchema(activitySchema)(req, res, mockNext);
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('should forward non-ZodError via next(error)', async () => {
+    const badSchema = {
+      parseAsync: vi.fn().mockRejectedValue(new Error('Some other database error')),
+    } as any;
+    const req = { body: {}, query: {}, params: {} } as any;
+    const res = mockRes();
+    const mockNextFn = vi.fn();
+    await validateSchema(badSchema)(req, res, mockNextFn);
+    expect(mockNextFn).toHaveBeenCalledWith(expect.any(Error));
   });
 });
 

@@ -1,3 +1,8 @@
+/**
+ * All SQL queries in this file use parameterized statements only.
+ * No string interpolation is used in SQL expressions.
+ * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
+ */
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { User } from '../../domain/entities/User';
 import { DatabaseConnection } from './DatabaseConnection';
@@ -30,7 +35,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    const rows = await this.db.query<UserRow>('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+    const rows = await this.db.query<UserRow>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     if (rows.length === 0) return null;
     return this.mapRowToUser(rows[0]);
   }

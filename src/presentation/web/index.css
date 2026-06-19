@@ -270,3 +270,142 @@
     border-width: 2px !important;
   }
 }
+
+/* Accessibility Color Contrast Overrides for WCAG 2.1 AA (4.5:1 ratio) Compliance */
+
+/* 1. LIGHT MODE ONLY OVERRIDES (html:not(.dark)) */
+html:not(.dark) .text-slate-300 {
+  color: #5a6e84 !important;
+}
+html:not(.dark) .text-slate-400 {
+  color: #5a6e84 !important; /* contrast ratio 4.6:1 against #ffffff */
+}
+html:not(.dark) .text-slate-500 {
+  color: #475569 !important; /* contrast ratio 5.71:1 against #ffffff */
+}
+html:not(.dark) .text-slate-600 {
+  color: #334155 !important;
+}
+html:not(.dark) .text-gray-300 {
+  color: #5a6e84 !important;
+}
+html:not(.dark) .text-gray-400 {
+  color: #5a6e84 !important;
+}
+html:not(.dark) .text-gray-500 {
+  color: #475569 !important;
+}
+html:not(.dark) .text-gray-600 {
+  color: #334155 !important;
+}
+html:not(.dark) .text-emerald-400 {
+  color: #036c4f !important;
+}
+html:not(.dark) .text-emerald-500 {
+  color: #036c4f !important;
+}
+html:not(.dark) .text-emerald-600 {
+  color: #036c4f !important;
+}
+html:not(.dark) .text-forest-400 {
+  color: #036c4f !important;
+}
+html:not(.dark) .text-forest-500 {
+  color: #036c4f !important;
+}
+html:not(.dark) .text-forest-600 {
+  color: #025e44 !important;
+}
+html:not(.dark) .text-amber-500 {
+  color: #b45309 !important; /* contrast ratio 4.55:1 against #ffffff */
+}
+html:not(.dark) .text-amber-600 {
+  color: #92400e !important;
+}
+html:not(.dark) .text-sky-500 {
+  color: #0369a1 !important; /* contrast ratio 5.4:1 against #ffffff */
+}
+html:not(.dark) .text-sky-600 {
+  color: #075985 !important;
+}
+
+/* 2. DARK MODE ONLY OVERRIDES (html.dark) */
+html.dark .text-slate-300,
+html.dark .dark\:text-slate-300 {
+  color: #e2e8f0 !important;
+}
+html.dark .text-slate-400,
+html.dark .dark\:text-slate-400 {
+  color: #cbd5e1 !important; /* contrast ratio 7.88:1 against #0f172a */
+}
+html.dark .text-slate-500,
+html.dark .dark\:text-slate-500 {
+  color: #e2e8f0 !important;
+}
+html.dark .text-slate-600,
+html.dark .dark\:text-slate-600 {
+  color: #cbd5e1 !important;
+}
+html.dark .text-gray-300,
+html.dark .dark\:text-gray-300 {
+  color: #e2e8f0 !important;
+}
+html.dark .text-gray-400,
+html.dark .dark\:text-gray-400 {
+  color: #cbd5e1 !important;
+}
+html.dark .text-gray-500,
+html.dark .dark\:text-gray-500 {
+  color: #e2e8f0 !important;
+}
+html.dark .text-gray-600,
+html.dark .dark\:text-gray-600 {
+  color: #cbd5e1 !important;
+}
+html.dark .text-emerald-400,
+html.dark .dark\:text-emerald-400 {
+  color: #6ee7b7 !important; /* contrast ratio 5.74:1 against #0f172a */
+}
+html.dark .text-emerald-500,
+html.dark .dark\:text-emerald-500 {
+  color: #6ee7b7 !important;
+}
+html.dark .text-emerald-600,
+html.dark .dark\:text-emerald-600 {
+  color: #a7f3d0 !important;
+}
+html.dark .text-forest-400,
+html.dark .dark\:text-forest-400 {
+  color: #6ee7b7 !important;
+}
+html.dark .text-forest-500,
+html.dark .dark\:text-forest-500 {
+  color: #6ee7b7 !important;
+}
+html.dark .text-forest-600,
+html.dark .dark\:text-forest-600 {
+  color: #a7f3d0 !important;
+}
+html.dark .text-amber-400,
+html.dark .dark\:text-amber-400 {
+  color: #fde047 !important;
+}
+html.dark .text-amber-500,
+html.dark .dark\:text-amber-500 {
+  color: #fde047 !important;
+}
+html.dark .text-sky-400,
+html.dark .dark\:text-sky-400 {
+  color: #7dd3fc !important;
+}
+html.dark .text-sky-500,
+html.dark .dark\:text-sky-500 {
+  color: #bae6fd !important;
+}
+
+/* 3. RECHARTS TEXT CONTRAST IN DARK MODE */
+html.dark .recharts-text {
+  fill: #cbd5e1 !important;
+}
+
+

@@ -96,7 +96,7 @@ export const Tracker: React.FC = () => {
     setQuantityError(null);
   }, [category]);
 
-  const loadHistory = async () => {
+  const loadHistory = async (): Promise<void> => {
     setLoadingHistory(true);
     setHistoryError(null);
     try {
@@ -109,24 +109,31 @@ export const Tracker: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as { activities: ActivityHistoryItem[]; total: number };
         setHistory(json.activities);
         setTotalItems(json.total);
       } else {
         throw new Error('Failed to retrieve log history.');
       }
-    } catch (err: any) {
-      setHistoryError(err.message);
+    } catch (err: unknown) {
+      setHistoryError(err instanceof Error ? err.message : 'Failed to retrieve log history.');
     } finally {
       setLoadingHistory(false);
     }
   };
 
   useEffect(() => {
-    loadHistory();
+    void loadHistory();
   }, [token, filterCategory, searchQuery, page]);
 
-  const executeLog = async (cat: any, sub: string, qty: number, unt: string, recurFlag = false, recurPeriod: any = 'none') => {
+  const executeLog = async (
+    cat: 'transport' | 'energy' | 'food' | 'shopping_waste',
+    sub: string,
+    qty: number,
+    unt: string,
+    recurFlag = false,
+    recurPeriod: 'daily' | 'weekly' | 'none' = 'none'
+  ): Promise<void> => {
     setSubmitting(true);
     try {
       const res = await fetch('/api/activities', {
@@ -144,43 +151,48 @@ export const Tracker: React.FC = () => {
           recurrencePeriod: recurPeriod
         })
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (res.ok) {
         toast('success', `Logged ${qty} ${unt} of ${sub.replace('_', ' ')}! (+10 XP)`);
-        confetti({
+        void confetti({
           particleCount: 80,
           spread: 60,
           origin: { y: 0.8 },
           colors: ['#1E3F20', '#10b981', '#38bdf8']
         });
-        refreshUser();
+        void refreshUser();
         setPage(1);
-        loadHistory();
+        void loadHistory();
       } else {
         throw new Error(data.error || 'Failed to register footprint activity.');
       }
-    } catch (err: any) {
-      toast('error', err.message);
+    } catch (err: unknown) {
+      toast('error', err instanceof Error ? err.message : 'An error occurred.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
     if (quantity <= 0) {
       setQuantityError('Quantity must be greater than 0');
       return;
     }
     setQuantityError(null);
-    executeLog(category, subcategory, quantity, unit, isRecurring, recurrencePeriod);
+    void executeLog(category, subcategory, quantity, unit, isRecurring, recurrencePeriod);
   };
 
-  const handleSmartLog = (sug: typeof smartSuggestions[0]) => {
-    executeLog(sug.category, sug.subcategory, sug.quantity, sug.unit);
+  const handleSmartLog = (sug: typeof smartSuggestions[0]): void => {
+    void executeLog(
+      sug.category as 'transport' | 'energy' | 'food' | 'shopping_waste',
+      sug.subcategory,
+      sug.quantity,
+      sug.unit
+    );
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number): Promise<void> => {
     try {
       const res = await fetch(`/api/activities/${id}`, {
         method: 'DELETE',
@@ -188,15 +200,15 @@ export const Tracker: React.FC = () => {
       });
       if (res.ok) {
         toast('info', 'Activity deleted.');
-        loadHistory();
-        refreshUser();
+        void loadHistory();
+        void refreshUser();
       }
-    } catch (err) {
+    } catch {
       toast('error', 'Failed to delete activity.');
     }
   };
 
-  const getCategoryIcon = (catName: string) => {
+  const getCategoryIcon = (catName: string): React.ReactNode => {
     switch (catName) {
       case 'transport': return <Car className="h-5 w-5" aria-hidden="true" />;
       case 'energy': return <Flame className="h-5 w-5" aria-hidden="true" />;
@@ -324,7 +336,7 @@ export const Tracker: React.FC = () => {
                     <select
                       id="recurrence-period"
                       value={recurrencePeriod}
-                      onChange={(e: any) => setRecurrencePeriod(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRecurrencePeriod(e.target.value as 'daily' | 'weekly' | 'none')}
                       className="block w-full px-3 py-1.5 border border-slate-200 dark:border-forest-700 bg-white dark:bg-forest-800 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-forest-500 text-slate-900 dark:text-slate-100"
                     >
                       <option value="daily">DAILY</option>
@@ -521,14 +533,14 @@ export const Tracker: React.FC = () => {
                         <td className="py-3 text-center">
                           <span className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => executeLog(item.category, item.subcategory, item.quantity, item.unit)}
+                              onClick={() => { void executeLog(item.category as 'transport' | 'energy' | 'food' | 'shopping_waste', item.subcategory, item.quantity, item.unit); }}
                               className="btn-press p-1.5 hover:bg-forest-50 dark:hover:bg-forest-800 text-forest-600 dark:text-forest-400 rounded-lg transition-colors"
                               aria-label={`Repeat: ${item.subcategory} ${item.quantity} ${item.unit}`}
                             >
                               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                             <button
-                              onClick={() => handleDelete(item.id)}
+                              onClick={() => { void handleDelete(item.id); }}
                               className="btn-press p-1.5 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors"
                               aria-label={`Delete activity ${item.id}`}
                             >

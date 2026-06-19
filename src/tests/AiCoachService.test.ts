@@ -103,6 +103,62 @@ describe('AiCoachService Unit Tests', () => {
     expect(response.reply).toBeTruthy();
     expect(response.suggestions.length).toBeGreaterThan(0);
   });
+
+  it('should return welcome insight when activities list is empty', () => {
+    const insights = AiCoachService.getWeeklyInsights(mockUser, []);
+    expect(insights).toEqual(['Welcome! Start logging your transportation, food, shopping, and home energy to unlock personalized insights.']);
+  });
+
+  it('should flag high food emissions when foodEmissions > 20', () => {
+    const highFoodActivities: Activity[] = [
+      {
+        id: 3,
+        userId: 1,
+        category: 'food',
+        subcategory: 'meat',
+        quantity: 5,
+        unit: 'meals',
+        co2Emissions: 25.0,
+        timestamp: new Date(),
+        isRecurring: false,
+        recurrencePeriod: 'none'
+      }
+    ];
+    const insights = AiCoachService.getWeeklyInsights(mockUser, highFoodActivities);
+    expect(insights.some(i => i.includes('Food emissions are relatively high'))).toBe(true);
+  });
+
+  it('should respond to stats queries with empty activities list', () => {
+    const response = AiCoachService.chat('show my emissions footprint stats', mockUser, []);
+    expect(response.reply).toContain("You haven't logged any activities yet!");
+    expect(response.suggestions.length).toBeGreaterThan(0);
+  });
+
+  it('should respond to stats queries with positive emissions', () => {
+    const response = AiCoachService.chat('show my footprint scorecard and statistics', mockUser, mockActivities);
+    expect(response.reply).toContain('I have analyzed your footprint!');
+    expect(response.insights.some(i => i.includes('Sapling'))).toBe(true);
+    expect(response.insights.length).toBeGreaterThan(0);
+  });
+
+  it('should respond to challenges and points queries', () => {
+    const response = AiCoachService.chat('what points or badge achievements can I earn?', mockUser, mockActivities);
+    expect(response.reply).toContain('rewards your dedication!');
+    expect(response.reply).toContain('10 XP');
+    expect(response.insights.length).toBeGreaterThan(0);
+  });
+
+  it('should cover zero emission branches for transport, food, and energy queries', () => {
+    const responseTrans = AiCoachService.chat('transport', mockUser, []);
+    expect(responseTrans.insights.some(i => i.includes('0%'))).toBe(true);
+
+    const responseFood = AiCoachService.chat('food', mockUser, []);
+    expect(responseFood.insights.some(i => i.includes('0%'))).toBe(true);
+
+    const responseEnergy = AiCoachService.chat('energy', mockUser, []);
+    expect(responseEnergy.insights.some(i => i.includes('0%'))).toBe(true);
+  });
 });
 
 export default {};
+

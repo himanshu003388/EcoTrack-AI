@@ -6,8 +6,8 @@ interface ChatMessage {
   id: number;
   sender: 'user' | 'coach';
   text: string;
-  insights?: string[];
-  suggestions?: string[];
+  insights?: string[] | undefined;
+  suggestions?: string[] | undefined;
 }
 
 export const Coach: React.FC = () => {
@@ -21,7 +21,7 @@ export const Coach: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
@@ -44,7 +44,7 @@ export const Coach: React.FC = () => {
     }
   }, [user]);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (): void => {
     try {
       if (messagesEndRef.current && typeof messagesEndRef.current.scrollIntoView === 'function') {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -58,7 +58,7 @@ export const Coach: React.FC = () => {
     scrollToBottom();
   }, [messages, loading]);
 
-  const handleSendMessage = async (textToSend: string) => {
+  const handleSendMessage = async (textToSend: string): Promise<void> => {
     if (!textToSend.trim()) return;
 
     const userMsg: ChatMessage = {
@@ -79,7 +79,7 @@ export const Coach: React.FC = () => {
         },
         body: JSON.stringify({ message: textToSend })
       });
-      const data = await res.json();
+      const data = (await res.json()) as { reply: string; insights?: string[]; suggestions?: string[] };
       if (res.ok) {
         const coachMsg: ChatMessage = {
           id: Date.now() + 1,
@@ -96,7 +96,7 @@ export const Coach: React.FC = () => {
       } else {
         throw new Error('Chat failed');
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => [
         ...prev,
         {
@@ -109,9 +109,9 @@ export const Coach: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
-    handleSendMessage(inputMessage);
+    void handleSendMessage(inputMessage);
   };
 
   return (
@@ -177,7 +177,7 @@ export const Coach: React.FC = () => {
                   {msg.suggestions.map((sug, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleSendMessage(sug)}
+                      onClick={() => { void handleSendMessage(sug); }}
                       className="px-3.5 py-1.5 bg-white dark:bg-forest-800 hover:bg-forest-50 dark:hover:bg-forest-700 border border-slate-200/60 dark:border-forest-700 hover:border-forest-200 dark:hover:border-forest-600 text-slate-600 dark:text-slate-300 hover:text-forest-700 dark:hover:text-forest-300 rounded-full text-xs font-semibold transition-all duration-200 shadow-sm"
                     >
                       {sug}

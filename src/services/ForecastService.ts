@@ -63,12 +63,17 @@ export class ForecastService {
       transport: 0, energy: 0, food: 0, shopping_waste: 0
     };
 
-    for (const act of userActivities) {
-      const actDate = new Date(act.timestamp);
-      if (actDate >= fifteenDaysAgo && actDate <= now) {
+    const fifteenDaysAgoTime = fifteenDaysAgo.getTime();
+    const thirtyDaysAgoTime = thirtyDaysAgo.getTime();
+    const nowTime = now.getTime();
+
+    for (let i = 0; i < userActivities.length; i++) {
+      const act = userActivities[i];
+      const actTime = act.timestamp.getTime();
+      if (actTime >= fifteenDaysAgoTime && actTime <= nowTime) {
         recentEmissions += act.co2Emissions;
         recentCategoryEmissions[act.category] += act.co2Emissions;
-      } else if (actDate >= thirtyDaysAgo && actDate < fifteenDaysAgo) {
+      } else if (actTime >= thirtyDaysAgoTime && actTime < fifteenDaysAgoTime) {
         priorEmissions += act.co2Emissions;
         priorCategoryEmissions[act.category] += act.co2Emissions;
       }

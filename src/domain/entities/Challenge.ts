@@ -16,5 +16,5 @@ export interface UserChallenge {
   status: 'active' | 'completed' | 'failed';
   progress: number; // e.g. how many days successfully logged or % completed
   startedAt: Date;
-  completedAt?: Date;
+  completedAt?: Date | undefined;
 }

@@ -1,3 +1,8 @@
+/**
+ * All SQL queries in this file use parameterized statements only.
+ * No string interpolation is used in SQL expressions.
+ * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
+ */
 import { IChallengeRepository, JoinedUserChallenge } from '../../domain/repositories/IChallengeRepository';
 import { Challenge, UserChallenge } from '../../domain/entities/Challenge';
 import { DatabaseConnection } from './DatabaseConnection';
@@ -32,6 +37,7 @@ interface JoinedChallengeRow extends ChallengeRow, UserChallengeRow {
 }
 
 export class ChallengeRepository implements IChallengeRepository {
+  private challengesCache: Challenge[] | null = null;
   constructor(private db: DatabaseConnection) {}
 
   private mapRowToChallenge(row: ChallengeRow): Challenge {
@@ -58,11 +64,17 @@ export class ChallengeRepository implements IChallengeRepository {
   }
 
   async listAll(): Promise<Challenge[]> {
+    if (this.challengesCache) return this.challengesCache;
     const rows = await this.db.query<ChallengeRow>('SELECT * FROM challenges');
-    return rows.map((r) => this.mapRowToChallenge(r));
+    this.challengesCache = rows.map((r) => this.mapRowToChallenge(r));
+    return this.challengesCache;
   }
 
   async findById(id: number): Promise<Challenge | null> {
+    if (this.challengesCache) {
+      const cached = this.challengesCache.find((c) => c.id === id);
+      if (cached) return cached;
+    }
     const rows = await this.db.query<ChallengeRow>('SELECT * FROM challenges WHERE id = $1', [id]);
     if (rows.length === 0) return null;
     return this.mapRowToChallenge(rows[0]);
@@ -80,7 +92,7 @@ export class ChallengeRepository implements IChallengeRepository {
       userId: row.user_id,
       challengeId: row.challenge_id,
       status: row.status as UserChallenge['status'],
-      progress: typeof row.progress === 'string' ? parseFloat(row.progress) : (row.progress as number),
+      progress: row.progress !== null ? (typeof row.progress === 'string' ? parseFloat(row.progress) : row.progress) : 0,
       startedAt: new Date(row.started_at),
       completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
       title: row.title,

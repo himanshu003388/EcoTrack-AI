@@ -26,7 +26,7 @@ class ResizeObserverMock {
   unobserve() {}
   disconnect() {}
 }
-window.ResizeObserver = ResizeObserverMock as any;
+window.ResizeObserver = ResizeObserverMock;
 
 // Extend Vitest matchers types with jest-axe matchers
 declare module 'vitest' {

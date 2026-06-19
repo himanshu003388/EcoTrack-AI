@@ -1,9 +1,12 @@
+/* eslint-disable no-console */
 import express, { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import compression from 'compression';
 
 // Import configurations and adapters
 import { DatabaseConnection } from '../../infrastructure/database/DatabaseConnection';
@@ -14,11 +17,11 @@ import { GoalRepository } from '../../infrastructure/database/GoalRepository';
 // Import Use Cases
 import { LogActivity } from '../../application/use-cases/LogActivity';
 import { GetActivities } from '../../application/use-cases/GetActivities';
-import { GetDashboardData } from '../../application/use-cases/GetDashboardData';
-import { GetRecommendations } from '../../application/use-cases/GetRecommendations';
-import { GetForecast } from '../../application/use-cases/GetForecast';
+import { GetDashboardData, clearDashboardCache } from '../../application/use-cases/GetDashboardData';
+import { GetRecommendations, clearRecommendationsCache } from '../../application/use-cases/GetRecommendations';
+import { GetForecast, clearForecastCache } from '../../application/use-cases/GetForecast';
 import { ManageChallenges } from '../../application/use-cases/ManageChallenges';
-import { GenerateReport } from '../../application/use-cases/GenerateReport';
+import { GenerateReport, clearReportCache } from '../../application/use-cases/GenerateReport';
 
 // Import Services
 import { AiCoachService } from '../../services/AiCoachService';
@@ -38,6 +41,7 @@ import {
 dotenv.config();
 
 const app = express();
+app.use(compression()); // gzip all responses
 const PORT = process.env.PORT || 5000;
 
 // Security Middlewares
@@ -46,30 +50,68 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://*"],
-      connectSrc: ["'self'", "http://localhost:5000"],
-      formAction: ["'self'"],
-      baseUri: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Tailwind needs inline styles
+      imgSrc: ["'self'", "data:", "blob:"],
+      fontSrc: ["'self'"],
+      connectSrc: ["'self'"],
       objectSrc: ["'none'"],
-    },
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],    // Clickjacking protection
+      upgradeInsecureRequests: [],
+    }
   },
+  hsts: {
+    maxAge: 31536000,               // 1 year HSTS
+    includeSubDomains: true,
+    preload: true
+  },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  permittedCrossDomainPolicies: false,
+  crossOriginEmbedderPolicy: false, // needed for some resources
 }));
 
-app.use(cors({
+const corsOptions = {
   origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
-  credentials: true
-}));
+  methods: ['GET', 'POST', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+  maxAge: 86400  // preflight cache for 24 hours
+};
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '100kb' }));
 app.use(xssSanitizer);
 
 // Rate Limiters
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 mins
-  max: 100, // Limit IP to 100 requests per window
-  message: { error: 'Too many requests from this IP. Please try again after 15 minutes.' }
+// General API limiter
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+// Strict limiter for write operations
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,   // 1 minute
+  max: 20,               // 20 writes per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Too many write requests.' }
+});
+
+// Chat limiter (AI calls are expensive)
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { error: 'Chat rate limit reached.' }
 });
 
 
@@ -91,10 +133,61 @@ const generateReportUseCase = new GenerateReport(activityRepo, userRepo, goalRep
 
 
 
+// CSRF Token Helpers & Middleware
+const getCsrfTokenFromCookie = (req: Request): string | null => {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+    const parts = cookie.split('=');
+    const key = parts.shift()?.trim();
+    const value = parts.join('=').trim();
+    if (key === 'csrfToken') acc = value;
+    return acc;
+  }, '');
+  return cookies || null;
+};
+
+const csrfProtection = (req: Request, res: Response, next: NextFunction): void => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    next();
+    return;
+  }
+  if (process.env.NODE_ENV === 'test') {
+    next();
+    return;
+  }
+  const cookieToken = getCsrfTokenFromCookie(req);
+  const headerToken = req.headers['x-csrf-token'];
+  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+    res.status(403).json({ error: 'CSRF token validation failed.' });
+    return;
+  }
+  next();
+};
+
+// CSRF token generation endpoint (Must be placed before general authenticateToken)
+app.get('/api/csrf-token', apiLimiter, (_req: Request, res: Response) => {
+  const token = crypto.randomBytes(32).toString('hex');
+  res.cookie('csrfToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/'
+  });
+  res.json({ csrfToken: token });
+});
+
+// Apply rate limiter globally to all routes
+app.use(apiLimiter);
+
 // ----------------------------------------------------
 // Protected Routes (JWT required)
 // ----------------------------------------------------
-app.use('/api', generalLimiter, authenticateToken);
+app.use('/api', authenticateToken);
+app.use('/api', csrfProtection);
+app.post('/api/activities', writeLimiter);
+app.post('/api/goals', writeLimiter);
+app.post('/api/coach/chat', chatLimiter);
 
 // User Profile info
 app.get('/api/auth/me', async (req: AuthenticatedRequest, res: Response) => {
@@ -102,7 +195,8 @@ app.get('/api/auth/me', async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user!.id;
     const user = await userRepo.findById(userId);
     if (!user) {
-      return res.status(404).json({ error: 'User profile not found.' });
+      res.status(404).json({ error: 'User profile not found.' });
+      return;
     }
     res.status(200).json({
       id: user.id,
@@ -125,6 +219,7 @@ app.get('/api/dashboard', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const data = await getDashboardUseCase.execute(userId);
+    res.set('Cache-Control', 'private, max-age=30');
     res.status(200).json(data);
   } catch {
     res.status(500).json({ error: 'Failed to retrieve dashboard details.' });
@@ -135,17 +230,26 @@ app.get('/api/dashboard', async (req: AuthenticatedRequest, res: Response) => {
 app.post('/api/activities', validateSchema(LogActivitySchema), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { category, subcategory, quantity, unit, timestamp, isRecurring, recurrencePeriod } = req.body;
+    const body = req.body as {
+      category: string;
+      subcategory: string;
+      quantity: number;
+      unit: string;
+      timestamp?: string;
+      isRecurring?: boolean;
+      recurrencePeriod?: string;
+    };
+    const { category, subcategory, quantity, unit, timestamp, isRecurring, recurrencePeriod } = body;
     
     const activity = await logActivityUseCase.execute({
       userId,
-      category,
+      category: category as 'transport' | 'energy' | 'food' | 'shopping_waste',
       subcategory,
       quantity,
       unit,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      isRecurring,
-      recurrencePeriod
+      isRecurring: !!isRecurring,
+      recurrencePeriod: recurrencePeriod ? (recurrencePeriod as 'daily' | 'weekly' | 'none') : 'none'
     });
 
     res.status(201).json({ message: 'Activity logged successfully!', activity });
@@ -157,28 +261,40 @@ app.post('/api/activities', validateSchema(LogActivitySchema), async (req: Authe
 app.get('/api/activities', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { category, search, limit, offset, startDate, endDate } = req.query;
+    const query = req.query as Record<string, unknown>;
+    const category = typeof query.category === 'string' ? query.category : undefined;
+    const search = typeof query.search === 'string' ? query.search : undefined;
+    const limit = typeof query.limit === 'string' ? query.limit : undefined;
+    const offset = typeof query.offset === 'string' ? query.offset : undefined;
+    const startDate = typeof query.startDate === 'string' ? query.startDate : undefined;
+    const endDate = typeof query.endDate === 'string' ? query.endDate : undefined;
 
     const filters: Record<string, unknown> = {};
     if (category) filters.category = category;
-    if (search) filters.search = String(search).slice(0, 200); // cap search string length
+    if (search) filters.search = search.slice(0, 200); // cap search string length
     if (limit) {
-      const parsedLimit = parseInt(String(limit), 10);
-      if (!isNaN(parsedLimit) && parsedLimit > 0) filters.limit = Math.min(parsedLimit, 500);
+      const parsedLimit = parseInt(limit, 10);
+      if (!Number.isNaN(parsedLimit) && parsedLimit > 0) filters.limit = Math.min(parsedLimit, 500);
     }
     if (offset) {
-      const parsedOffset = parseInt(String(offset), 10);
-      if (!isNaN(parsedOffset) && parsedOffset >= 0) filters.offset = parsedOffset;
+      const parsedOffset = parseInt(offset, 10);
+      if (!Number.isNaN(parsedOffset) && parsedOffset >= 0) filters.offset = parsedOffset;
     }
     if (startDate) {
-      const d = new Date(String(startDate));
+      const d = new Date(startDate);
       if (!isNaN(d.getTime())) filters.startDate = d;
-      else return res.status(400).json({ error: 'Invalid startDate format. Use ISO 8601.' });
+      else {
+        res.status(400).json({ error: 'Invalid startDate format. Use ISO 8601.' });
+        return;
+      }
     }
     if (endDate) {
-      const d = new Date(String(endDate));
+      const d = new Date(endDate);
       if (!isNaN(d.getTime())) filters.endDate = d;
-      else return res.status(400).json({ error: 'Invalid endDate format. Use ISO 8601.' });
+      else {
+        res.status(400).json({ error: 'Invalid endDate format. Use ISO 8601.' });
+        return;
+      }
     }
 
     const result = await getActivitiesUseCase.execute(userId, filters);
@@ -193,14 +309,20 @@ app.delete('/api/activities/:id', async (req: AuthenticatedRequest, res: Respons
     const userId = req.user!.id;
     const activityId = parseInt(String(req.params.id), 10);
 
-    if (isNaN(activityId) || activityId <= 0) {
-      return res.status(400).json({ error: 'Invalid activity ID. Must be a positive integer.' });
+    if (Number.isNaN(activityId) || activityId <= 0) {
+      res.status(400).json({ error: 'Invalid activity ID. Must be a positive integer.' });
+      return;
     }
 
     const deleted = await activityRepo.delete(activityId, userId);
     if (!deleted) {
-      return res.status(404).json({ error: 'Activity not found or does not belong to user.' });
+      res.status(404).json({ error: 'Activity not found or does not belong to user.' });
+      return;
     }
+    clearDashboardCache(userId);
+    clearForecastCache(userId);
+    clearRecommendationsCache(userId);
+    clearReportCache(userId);
     res.status(200).json({ message: 'Activity deleted successfully.' });
   } catch {
     res.status(500).json({ error: 'Failed to delete activity.' });
@@ -212,6 +334,7 @@ app.get('/api/recommendations', async (req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user!.id;
     const recommendations = await getRecommendationsUseCase.execute(userId);
+    res.set('Cache-Control', 'private, max-age=60');
     res.status(200).json(recommendations);
   } catch {
     res.status(500).json({ error: 'Failed to load recommendations.' });
@@ -223,6 +346,7 @@ app.get('/api/forecast', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const forecast = await getForecastUseCase.execute(userId);
+    res.set('Cache-Control', 'private, max-age=60');
     res.status(200).json(forecast);
   } catch {
     res.status(500).json({ error: 'Failed to load carbon emissions forecast.' });
@@ -233,7 +357,8 @@ app.get('/api/forecast', async (req: AuthenticatedRequest, res: Response) => {
 app.post('/api/goals', validateSchema(GoalSchema), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { targetCo2 } = req.body;
+    const body = req.body as { targetCo2: number };
+    const { targetCo2 } = body;
     
     const startDate = new Date();
     const endDate = new Date();
@@ -247,6 +372,10 @@ app.post('/api/goals', validateSchema(GoalSchema), async (req: AuthenticatedRequ
       achieved: false
     });
 
+    clearDashboardCache(userId);
+    clearForecastCache(userId);
+    clearReportCache(userId);
+
     res.status(201).json({ message: 'Goal target set successfully!', goal });
   } catch {
     res.status(400).json({ error: 'Failed to set target goal.' });
@@ -257,13 +386,17 @@ app.post('/api/goals', validateSchema(GoalSchema), async (req: AuthenticatedRequ
 app.post('/api/coach/chat', validateSchema(ChatSchema), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { message } = req.body;
+    const body = req.body as { message: string };
+    const { message } = body;
     
-    const user = await userRepo.findById(userId);
-    const actResult = await activityRepo.findByUserId(userId, { limit: 100 });
+    const [user, actResult] = await Promise.all([
+      userRepo.findById(userId),
+      activityRepo.findByUserId(userId, { limit: 100 })
+    ]);
 
     if (!user) {
-      return res.status(404).json({ error: 'User profile not found.' });
+      res.status(404).json({ error: 'User profile not found.' });
+      return;
     }
 
     const response = AiCoachService.chat(message, user, actResult.activities);
@@ -288,8 +421,9 @@ app.post('/api/challenges/:id/join', async (req: AuthenticatedRequest, res: Resp
   try {
     const userId = req.user!.id;
     const challengeId = parseInt(String(req.params.id), 10);
-    if (isNaN(challengeId) || challengeId <= 0) {
-      return res.status(400).json({ error: 'Invalid challenge ID. Must be a positive integer.' });
+    if (Number.isNaN(challengeId) || challengeId <= 0) {
+      res.status(400).json({ error: 'Invalid challenge ID. Must be a positive integer.' });
+      return;
     }
     const joined = await manageChallengesUseCase.join(userId, challengeId);
     res.status(200).json({ message: 'Enrolled in challenge successfully!', joined });
@@ -302,8 +436,9 @@ app.post('/api/challenges/:id/complete', async (req: AuthenticatedRequest, res: 
   try {
     const userId = req.user!.id;
     const challengeId = parseInt(String(req.params.id), 10);
-    if (isNaN(challengeId) || challengeId <= 0) {
-      return res.status(400).json({ error: 'Invalid challenge ID. Must be a positive integer.' });
+    if (Number.isNaN(challengeId) || challengeId <= 0) {
+      res.status(400).json({ error: 'Invalid challenge ID. Must be a positive integer.' });
+      return;
     }
     const completed = await manageChallengesUseCase.complete(userId, challengeId);
     res.status(200).json({ message: 'Congratulations! Challenge completed and points awarded.', completed });
@@ -316,10 +451,16 @@ app.post('/api/challenges/:id/complete', async (req: AuthenticatedRequest, res: 
 app.get('/api/actions/daily', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const user = await userRepo.findById(userId);
-    const actResult = await activityRepo.findByUserId(userId, { limit: 200 });
-    if (!user) return res.status(404).json({ error: 'User not found.' });
+    const [user, actResult] = await Promise.all([
+      userRepo.findById(userId),
+      activityRepo.findByUserId(userId, { limit: 200 })
+    ]);
+    if (!user) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
     const dailyAction = SimpleActionService.getDailyAction(actResult.activities);
+    res.set('Cache-Control', 'public, max-age=3600');
     res.status(200).json(dailyAction);
   } catch {
     res.status(500).json({ error: 'Failed to load daily action.' });
@@ -327,7 +468,7 @@ app.get('/api/actions/daily', async (req: AuthenticatedRequest, res: Response) =
 });
 
 // Simple Actions catalog
-app.get('/api/actions', async (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/actions', (_req: AuthenticatedRequest, res: Response) => {
   try {
     const actions = SimpleActionService.getAllActions();
     res.status(200).json(actions);
@@ -341,6 +482,7 @@ app.get('/api/reports', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const report = await generateReportUseCase.execute(userId);
+    res.set('Cache-Control', 'private, max-age=30');
     res.status(200).json(report);
   } catch {
     res.status(500).json({ error: 'Failed to compile report summaries.' });
@@ -357,23 +499,39 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Global error handler middleware
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[Server Error]:', err);
-  res.status(500).json({ error: 'An internal server error occurred.' });
+// Global error handling middleware (must have 4 args for Express to recognize it)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const isDev = process.env.NODE_ENV !== 'production';
+  console.error('[EcoTrack Error]', err.message);
+
+  if (err instanceof SyntaxError && (err as { status?: number }).status === 400) {
+    res.status(400).json({ error: 'Invalid JSON payload.' });
+    return;
+  }
+
+  res.status(500).json({
+    error: 'Internal server error',
+    ...(isDev && { details: err.message, stack: err.stack })
+  });
+});
+
+// 404 handler (must come after all defined routes)
+app.use((req: express.Request, res: express.Response) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
 });
 
 // Database initialization & Start Server
 const serverInstance = db.initializeSchema()
   .then(() => {
     // Log key configuration on startup for transparency
-    console.log(`[EcoTrack AI] Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`[EcoTrack AI] Database: ${process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite (local)'}`);
+    console.info(`[EcoTrack AI] Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.info(`[EcoTrack AI] Database: ${process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite (local)'}`);
     if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
       console.warn('[EcoTrack AI] WARNING: Production mode running with SQLite. Set DATABASE_URL for PostgreSQL.');
     }
     return app.listen(PORT, () => {
-      console.log(`[EcoTrack AI Server] Service running on http://localhost:${PORT}`);
+      console.info(`[EcoTrack AI Server] Service running on http://localhost:${PORT}`);
     });
   })
   .catch((err) => {

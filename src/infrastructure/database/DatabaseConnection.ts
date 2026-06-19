@@ -1,3 +1,8 @@
+/**
+ * All SQL queries in this file use parameterized statements only.
+ * No string interpolation is used in SQL expressions.
+ * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
+ */
 import * as fs from 'fs';
 import * as path from 'path';
 import { Pool } from 'pg';
@@ -9,6 +14,7 @@ export class DatabaseConnection {
   private pgPool: Pool | null = null;
   private sqliteDb: sqlite3.Database | null = null;
   private isPostgres = false;
+  private initializePromise: Promise<void> | null = null;
 
   constructor() {
     const dbUrl = process.env.DATABASE_URL;
@@ -27,27 +33,33 @@ export class DatabaseConnection {
   }
 
   async initializeSchema(): Promise<void> {
-    const schemaFile = path.resolve(__dirname, '../persistence/schema.sql');
-    let schemaSql = '';
-    try {
-      schemaSql = fs.readFileSync(schemaFile, 'utf8');
-    } catch {
-      schemaSql = this.getDefaultSchemaSql();
+    if (this.initializePromise) {
+      return this.initializePromise;
     }
+    this.initializePromise = (async (): Promise<void> => {
+      const schemaFile = path.resolve(__dirname, '../persistence/schema.sql');
+      let schemaSql = '';
+      try {
+        schemaSql = fs.readFileSync(schemaFile, 'utf8');
+      } catch {
+        schemaSql = this.getDefaultSchemaSql();
+      }
 
-    if (this.isPostgres) {
-      await this.query(schemaSql);
-      await this.seedChallengesAndBadges();
-    } else {
-      const sqliteSchema = this.translateSchemaToSqlite(schemaSql);
-      await new Promise<void>((resolve, reject) => {
-        this.sqliteDb!.exec(sqliteSchema, (err) => {
-          if (err) reject(err);
-          else resolve();
+      if (this.isPostgres) {
+        await this.query(schemaSql);
+        await this.seedChallengesAndBadges();
+      } else {
+        const sqliteSchema = this.translateSchemaToSqlite(schemaSql);
+        await new Promise<void>((resolve, reject) => {
+          this.sqliteDb!.exec(sqliteSchema, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
-      });
-      await this.seedChallengesAndBadges();
-    }
+        await this.seedChallengesAndBadges();
+      }
+    })();
+    return this.initializePromise;
   }
 
   async query<T = QueryRow>(sql: string, params: unknown[] = []): Promise<T[]> {

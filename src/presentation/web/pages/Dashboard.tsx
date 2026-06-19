@@ -32,7 +32,7 @@ export const Dashboard: React.FC = memo(() => {
     return false;
   });
 
-  const dismissOnboarding = () => {
+  const dismissOnboarding = (): void => {
     localStorage.setItem('ecotrack_onboarded', 'true');
     setShowOnboarding(false);
   };
@@ -43,7 +43,7 @@ export const Dashboard: React.FC = memo(() => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as DashboardData;
         setData(json);
       } else {
         throw new Error('Failed to retrieve dashboard details.');
@@ -61,7 +61,7 @@ export const Dashboard: React.FC = memo(() => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as DailyAction;
         setDailyAction(json);
       }
     } catch {
@@ -72,11 +72,11 @@ export const Dashboard: React.FC = memo(() => {
   }, [token]);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchDailyAction();
+    void fetchDashboardData();
+    void fetchDailyAction();
   }, [fetchDashboardData, fetchDailyAction]);
 
-  const handleSetGoal = async (e: React.FormEvent) => {
+  const handleSetGoal = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     const target = parseFloat(newGoalTarget);
     if (isNaN(target) || target <= 0) {
@@ -92,12 +92,12 @@ export const Dashboard: React.FC = memo(() => {
         },
         body: JSON.stringify({ targetCo2: target }),
       });
-      const resJson = await res.json();
+      const resJson = (await res.json()) as { error?: string };
       if (res.ok) {
         toast('success', 'Carbon reduction goal set successfully!');
         setNewGoalTarget('');
-        fetchDashboardData();
-        refreshUser();
+        void fetchDashboardData();
+        void refreshUser();
       } else {
         toast('error', resJson.error || 'Failed to set carbon target.');
       }
@@ -175,7 +175,7 @@ export const Dashboard: React.FC = memo(() => {
             <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />
             <p className="font-semibold">Error: {error || 'Could not load dashboard.'}</p>
           </div>
-          <button onClick={fetchDashboardData} className="btn-press mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors">
+          <button onClick={() => { void fetchDashboardData(); }} className="btn-press mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors">
             Retry
           </button>
         </div>
@@ -196,7 +196,7 @@ export const Dashboard: React.FC = memo(() => {
         </div>
 
         <div className="bg-white dark:bg-forest-900 border border-slate-100 dark:border-forest-800 p-3 rounded-2xl shadow-sm flex items-center gap-3">
-          <form onSubmit={handleSetGoal} className="flex gap-2 items-center" aria-label="Set carbon reduction goal">
+          <form onSubmit={(e) => { void handleSetGoal(e); }} className="flex gap-2 items-center" aria-label="Set carbon reduction goal">
             <Target className="h-5 w-5 text-forest-500 shrink-0" aria-hidden="true" />
             <label htmlFor="goal-target" className="sr-only">Monthly Target CO2 in kg</label>
             <input

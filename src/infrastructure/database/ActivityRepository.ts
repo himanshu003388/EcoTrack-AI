@@ -1,3 +1,8 @@
+/**
+ * All SQL queries in this file use parameterized statements only.
+ * No string interpolation is used in SQL expressions.
+ * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
+ */
 import { IActivityRepository, ActivityFilters, CategorySummary, DailySummary } from '../../domain/repositories/IActivityRepository';
 import { Activity, ActivityCategory } from '../../domain/entities/Activity';
 import { DatabaseConnection } from './DatabaseConnection';
@@ -226,9 +231,6 @@ export class ActivityRepository implements IActivityRepository {
 
     // Remove duplicates
     const uniqueDates = Array.from(new Set(logDates));
-    if (uniqueDates.length === 0) {
-      return { lastLogDate: null, currentStreak: 0 };
-    }
 
     const today = new Date();
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();

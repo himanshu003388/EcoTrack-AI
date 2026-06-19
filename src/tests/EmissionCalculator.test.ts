@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EmissionCalculator } from '../services/EmissionCalculator';
+import factorsRaw from '../config/emissionFactors.json';
 
 describe('EmissionCalculator Service Unit Tests', () => {
   it('should calculate transport emissions correctly', () => {
@@ -70,5 +71,29 @@ describe('EmissionCalculator Service Unit Tests', () => {
   it('should handle decimal quantity', () => {
     const res = EmissionCalculator.calculate('food', 'vegan', 0.5);
     expect(res).toBe(0.25);
+  });
+
+  it('should return 0 when categoryFactors does not exist', () => {
+    expect(EmissionCalculator.calculate('non_existent' as any, 'sub', 10)).toBe(0);
+  });
+
+  it('should fallback to 0.18 for getCarKmEquivalent if car_petrol is missing', () => {
+    const originalCarPetrol = factorsRaw.transport.car_petrol;
+    delete (factorsRaw.transport as any).car_petrol;
+    try {
+      expect(EmissionCalculator.getCarKmEquivalent(1.8)).toBe(10.0);
+    } finally {
+      (factorsRaw.transport as any).car_petrol = originalCarPetrol;
+    }
+  });
+
+  it('should fallback to 0.38 for getElectricityHoursEquivalent if electricity is missing', () => {
+    const originalElectricity = factorsRaw.energy.electricity;
+    delete (factorsRaw.energy as any).electricity;
+    try {
+      expect(EmissionCalculator.getElectricityHoursEquivalent(3.8)).toBe(10.0);
+    } finally {
+      (factorsRaw.energy as any).electricity = originalElectricity;
+    }
   });
 });

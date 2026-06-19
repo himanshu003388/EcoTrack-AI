@@ -8,31 +8,45 @@ export interface CoachResponse {
 }
 
 export class AiCoachService {
+  /**
+   * Responds to user sustainability-related queries with dynamic advice, insights, and suggestions.
+   *
+   * @param query - The user's input text query.
+   * @param user - The current user details.
+   * @param activities - List of user logged activities for contextual calculations.
+   * @returns A CoachResponse containing the reply text, related insights, and follow-up suggestions.
+   */
   static chat(query: string, user: User, activities: Activity[]): CoachResponse {
     const text = query.toLowerCase();
 
-    // 1. Calculate basic stats for contextualization
-    const totalEmissions = activities.reduce((acc, act) => acc + act.co2Emissions, 0);
+    // 1. Calculate basic stats for contextualization (single pass)
+    let totalEmissions = 0;
     const categoryTotals: Record<ActivityCategory, number> = {
       transport: 0,
       energy: 0,
       food: 0,
       shopping_waste: 0
     };
-    activities.forEach(act => {
-      categoryTotals[act.category] = (categoryTotals[act.category] || 0) + act.co2Emissions;
-    });
 
     let highestCategory: ActivityCategory = 'transport';
     let highestVal = -1;
-    (Object.keys(categoryTotals) as ActivityCategory[]).forEach(cat => {
-      if (categoryTotals[cat] > highestVal) {
-        highestVal = categoryTotals[cat];
-        highestCategory = cat;
-      }
-    });
 
-    const highestPct = totalEmissions > 0 ? Math.round((categoryTotals[highestCategory] / totalEmissions) * 100) : 0;
+    for (let i = 0; i < activities.length; i++) {
+      const act = activities[i];
+      const emissions = act.co2Emissions;
+      totalEmissions += emissions;
+
+      const nextVal = categoryTotals[act.category] + emissions;
+      categoryTotals[act.category] = nextVal;
+
+      if (nextVal > highestVal) {
+        highestVal = nextVal;
+        highestCategory = act.category;
+      }
+    }
+
+    const highestPct = totalEmissions > 0 ? Math.round((highestVal / totalEmissions) * 100) : 0;
+
 
     // 2. Draft dynamic replies based on user keywords
     let reply = '';
@@ -100,20 +114,29 @@ export class AiCoachService {
     };
   }
 
-  // Generate weekly summary card insights
+  /**
+   * Generates a list of weekly summary insights based on the user's details and recent logs.
+   *
+   * @param user - The current user details.
+   * @param activities - Recent user activities.
+   * @returns Array of textual insights for the user's weekly summary card.
+   */
   static getWeeklyInsights(user: User, activities: Activity[]): string[] {
     const insights: string[] = [];
     if (activities.length === 0) {
       return ['Welcome! Start logging your transportation, food, shopping, and home energy to unlock personalized insights.'];
     }
 
-    const transportEmissions = activities
-      .filter(a => a.category === 'transport')
-      .reduce((acc, act) => acc + act.co2Emissions, 0);
-
-    const foodEmissions = activities
-      .filter(a => a.category === 'food')
-      .reduce((acc, act) => acc + act.co2Emissions, 0);
+    let transportEmissions = 0;
+    let foodEmissions = 0;
+    for (let i = 0; i < activities.length; i++) {
+      const a = activities[i];
+      if (a.category === 'transport') {
+        transportEmissions += a.co2Emissions;
+      } else if (a.category === 'food') {
+        foodEmissions += a.co2Emissions;
+      }
+    }
 
     if (transportEmissions > foodEmissions && transportEmissions > 15) {
       insights.push('Your transportation emissions are a key area. Replacing short drives with cycling could save up to 8.5 kg CO2e per trip!');

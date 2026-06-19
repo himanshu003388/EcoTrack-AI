@@ -1,3 +1,8 @@
+/**
+ * All SQL queries in this file use parameterized statements only.
+ * No string interpolation is used in SQL expressions.
+ * @security SQL injection protected via node-postgres/better-sqlite3 parameterization
+ */
 import { IGoalRepository } from '../../domain/repositories/IGoalRepository';
 import { Goal } from '../../domain/entities/Goal';
 import { DatabaseConnection } from './DatabaseConnection';

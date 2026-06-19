@@ -17,6 +17,22 @@ export interface ReportSummary {
   badgesCount: number;
 }
 
+const reportCache = new Map<string, { data: ReportSummary; expiresAt: number }>();
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+/**
+ * Clears the report summaries cache.
+ *
+ * @param userId - Optional specific user ID to clear cache for. If omitted, clears all cache.
+ */
+export function clearReportCache(userId?: number): void {
+  if (userId !== undefined) {
+    reportCache.delete(`report_${userId}`);
+  } else {
+    reportCache.clear();
+  }
+}
+
 export class GenerateReport {
   constructor(
     private activityRepository: IActivityRepository,
@@ -25,38 +41,46 @@ export class GenerateReport {
     private db: DatabaseConnection
   ) {}
 
+  /**
+   * Compiles the sustainability report metrics card for a specific user over the last 30 days.
+   *
+   * @param userId - The ID of the user.
+   * @returns A Promise resolving to the ReportSummary details.
+   * @throws Error if the user is not found.
+   */
   async execute(userId: number): Promise<ReportSummary> {
-    const user = await this.userRepository.findById(userId);
-    if (!user) throw new Error('User not found.');
+    const cacheKey = `report_${userId}`;
+    const cached = reportCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
 
     const now = new Date();
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(now.getDate() - 30);
 
-    // 1. Fetch activities
-    const actResult = await this.activityRepository.findByUserId(userId, { startDate: thirtyDaysAgo, limit: 1000 });
+    const [user, actResult, goalsList, bRes] = await Promise.all([
+      this.userRepository.findById(userId),
+      this.activityRepository.findByUserId(userId, { startDate: thirtyDaysAgo, limit: 1000 }),
+      this.goalRepository.listGoals(userId),
+      this.db.query<{ count: string | number }>('SELECT COUNT(*) as count FROM user_badges WHERE user_id = $1', [userId])
+    ]);
+
+    if (!user) throw new Error('User not found.');
     const activities = actResult.activities;
 
-    const totalEmissions = activities.reduce((acc, act) => acc + act.co2Emissions, 0);
-    
-    // Calculate days logged (unique days)
-    const logDays = new Set(activities.map(a => new Date(a.timestamp).toDateString())).size;
-    const activeDays = Math.max(1, logDays);
-    const averageDaily = totalEmissions / activeDays;
-
-    // 2. Carbon Saved
-    // National average is 16 kg/day. For each day logged, carbon saved = (16 - averageDailyEmission) * logDays
-    const baselineDaily = 16.0;
-    const carbonSaved = Math.max(0, Math.round((baselineDaily * activeDays - totalEmissions) * 10) / 10);
-
-    // 3. Money Saved
-    // Estimate money saved based on activities:
-    // - Transport (bike/walk): $0.20 per km saved in fuel/depreciation
-    // - Energy (solar): $0.15 per kWh generated
-    // - Food (vegan/vegetarian meals): $3.00 average savings over premium meat meals
-    // - Shopping (recycling): $0.50 per kg
+    let totalEmissions = 0;
     let moneySaved = 0;
-    activities.forEach(act => {
+    const logDaysSet = new Set<string>();
+    const breakdownMap: Record<string, number> = { transport: 0, energy: 0, food: 0, shopping_waste: 0 };
+
+    for (let i = 0; i < activities.length; i++) {
+      const act = activities[i];
+      totalEmissions += act.co2Emissions;
+      logDaysSet.add(act.timestamp.toDateString());
+      breakdownMap[act.category] = (breakdownMap[act.category] || 0) + act.co2Emissions;
+
+      // Money saved
       if (act.category === 'transport') {
         if (act.subcategory === 'bike' || act.subcategory === 'walking') {
           moneySaved += act.quantity * 0.20; // $0.20 per km
@@ -70,22 +94,24 @@ export class GenerateReport {
       } else if (act.category === 'shopping_waste' && act.subcategory === 'recycling') {
         moneySaved += act.quantity * 0.50; // $0.50 saved per kg
       }
-    });
+    }
+
+    const logDays = logDaysSet.size;
+    const activeDays = Math.max(1, logDays);
+    const averageDaily = totalEmissions / activeDays;
+
+    // 2. Carbon Saved
+    const baselineDaily = 16.0;
+    const carbonSaved = Math.max(0, Math.round((baselineDaily * activeDays - totalEmissions) * 10) / 10);
 
     // 4. Category breakdown
     const categories = ['transport', 'energy', 'food', 'shopping_waste'];
-    const breakdownMap: Record<string, number> = { transport: 0, energy: 0, food: 0, shopping_waste: 0 };
-    activities.forEach(act => {
-      breakdownMap[act.category] += act.co2Emissions;
-    });
-
     const categoryBreakdown = categories.map(cat => ({
       category: cat,
-      emissions: Math.round(breakdownMap[cat] * 10) / 10
+      emissions: Math.round((breakdownMap[cat] || 0) * 10) / 10
     }));
 
     // 5. Goals tracking
-    const goalsList = await this.goalRepository.listGoals(userId);
     const goals = goalsList.map(g => ({
       target: g.targetCo2,
       achieved: g.achieved,
@@ -93,10 +119,9 @@ export class GenerateReport {
     }));
 
     // 6. Badges count
-    const bRes = await this.db.query<{ count: string | number }>('SELECT COUNT(*) as count FROM user_badges WHERE user_id = $1', [userId]);
     const badgesCount = bRes[0] ? parseInt(String(bRes[0].count), 10) : 0;
 
-    return {
+    const result = {
       period: 'Last 30 Days',
       totalEmissions: Math.round(totalEmissions * 10) / 10,
       averageDaily: Math.round(averageDaily * 10) / 10,
@@ -109,5 +134,7 @@ export class GenerateReport {
       goals,
       badgesCount
     };
+    reportCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+    return result;
   }
 }

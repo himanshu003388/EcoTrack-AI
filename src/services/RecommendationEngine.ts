@@ -198,29 +198,32 @@ export class RecommendationEngine {
       shopping_waste: 0
     };
 
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgoTime = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-    for (const act of userActivities) {
-      if (new Date(act.timestamp) >= thirtyDaysAgo) {
-        categoryTotals[act.category] = (categoryTotals[act.category] || 0) + act.co2Emissions;
+    for (let i = 0; i < userActivities.length; i++) {
+      const act = userActivities[i];
+      if (act.timestamp.getTime() >= thirtyDaysAgoTime) {
+        categoryTotals[act.category] += act.co2Emissions;
       }
     }
 
     // Identify the category with highest emissions
     let highestCategory: ActivityCategory = 'transport';
     let highestVal = -1;
-    (Object.keys(categoryTotals) as ActivityCategory[]).forEach(cat => {
+    const cats: ActivityCategory[] = ['transport', 'energy', 'food', 'shopping_waste'];
+    for (let i = 0; i < cats.length; i++) {
+      const cat = cats[i];
       if (categoryTotals[cat] > highestVal) {
         highestVal = categoryTotals[cat];
         highestCategory = cat;
       }
-    });
+    }
 
     // Feasibility weights
-    const FEASIBILITY: Record<string, number> = { easy: 3.0, medium: 2.0, hard: 1.0 };
+    const FEASIBILITY: Record<'easy' | 'medium' | 'hard', number> = { easy: 3.0, medium: 2.0, hard: 1.0 };
 
     return RECOMMENDATION_CATALOG.map(rec => {
-      const feasibility = FEASIBILITY[rec.difficulty] ?? 2.0;
+      const feasibility = FEASIBILITY[rec.difficulty];
 
       let preferenceModifier = 1.0;
       if (rec.category === highestCategory) {
@@ -233,6 +236,6 @@ export class RecommendationEngine {
 
       return { ...rec, relevanceScore };
     })
-    .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
+    .sort((a, b) => b.relevanceScore - a.relevanceScore);
   }
 }

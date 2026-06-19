@@ -19,7 +19,7 @@ export const ForecastPage: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as ForecastData;
         setData(json);
       } else {
         throw new Error('Failed to retrieve forecast data.');
@@ -32,7 +32,7 @@ export const ForecastPage: React.FC = () => {
   }, [token]);
 
   useEffect(() => {
-    fetchForecast();
+    void fetchForecast();
   }, [fetchForecast]);
 
   if (loading) {

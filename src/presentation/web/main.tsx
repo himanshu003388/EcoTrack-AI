@@ -9,6 +9,41 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { CardSkeleton } from './components/Skeleton';
 import { ToastProvider } from './components/Toast';
 
+// Global CSRF fetch interceptor
+let csrfTokenInMemory: string | null = null;
+const originalFetch = window.fetch;
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const method = (init?.method || 'GET').toUpperCase();
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method) || url.includes('/api/csrf-token')) {
+    return originalFetch(input, init);
+  }
+
+  if (!csrfTokenInMemory) {
+    try {
+      const tokenRes = await originalFetch('/api/csrf-token');
+      if (tokenRes.ok) {
+        const data = (await tokenRes.json()) as { csrfToken: string };
+        csrfTokenInMemory = data.csrfToken;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to pre-fetch CSRF token:', err);
+    }
+  }
+
+  const headers = new Headers(init?.headers);
+  if (csrfTokenInMemory) {
+    headers.set('X-CSRF-Token', csrfTokenInMemory);
+  }
+
+  return originalFetch(input, {
+    ...init,
+    headers
+  });
+};
+
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Tracker = lazy(() => import('./pages/Tracker').then(m => ({ default: m.Tracker })));
 const Simulator = lazy(() => import('./pages/Simulator').then(m => ({ default: m.Simulator })));
@@ -26,7 +61,7 @@ const queryClient = new QueryClient({
   },
 });
 
-interface AppUser {
+export interface AppUser {
   id: number;
   email: string;
   username: string;
@@ -46,7 +81,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
@@ -61,7 +96,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
-export const useTheme = () => {
+export const useTheme = (): ThemeContextType => {
   const context = useContext(ThemeContext);
   if (!context) throw new Error('useTheme must be used within ThemeProvider');
   return context;
@@ -87,7 +122,7 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     localStorage.setItem('ecotrack_theme', theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  const toggleTheme = (): void => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
@@ -100,14 +135,15 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = async (): Promise<void> => {
     try {
       const res = await fetch('/api/auth/me');
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as AppUser;
         setUser(data);
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Failed to fetch user profile:', err);
     } finally {
       setLoading(false);
@@ -115,12 +151,12 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   };
 
   useEffect(() => {
-    fetchUserProfile();
+    void fetchUserProfile();
   }, []);
 
-  const login = () => {};
-  const logout = () => {};
-  const refreshUser = async () => {
+  const login = (): void => {};
+  const logout = (): void => {};
+  const refreshUser = async (): Promise<void> => {
     await fetchUserProfile();
   };
 

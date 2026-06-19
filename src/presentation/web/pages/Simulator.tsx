@@ -3,6 +3,17 @@ import { useToast } from '../components/Toast';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { Sliders, Leaf, DollarSign, Target, Award, RefreshCw, Save, Lightbulb, CheckCircle } from 'lucide-react';
 
+interface SavedScenario {
+  car: number;
+  transit: number;
+  meat: number;
+  energy: number;
+  footprint: number;
+  carbonSaved: number;
+  moneySaved: number;
+  date: string;
+}
+
 export const Simulator: React.FC = memo(() => {
   const { toast } = useToast();
   const baseCar = 200;
@@ -81,14 +92,14 @@ export const Simulator: React.FC = memo(() => {
   }, [toast]);
 
   const handleSave = useCallback(() => {
-    const scenario = {
+    const scenario: SavedScenario = {
       car, transit, meat, energy,
       footprint: Math.round(simData.totalFootprint),
       carbonSaved: Math.round(simData.carbonSaved),
       moneySaved: Math.round(simData.moneySaved),
       date: new Date().toISOString()
     };
-    const existing = JSON.parse(localStorage.getItem('ecotrack_scenarios') || '[]');
+    const existing = JSON.parse(localStorage.getItem('ecotrack_scenarios') || '[]') as SavedScenario[];
     existing.push(scenario);
     localStorage.setItem('ecotrack_scenarios', JSON.stringify(existing));
     toast('success', `Scenario saved! (${Math.round(simData.carbonSaved)} kg CO₂e saved)`);

@@ -53,6 +53,22 @@ export interface DashboardData {
   } | null;
 }
 
+const dashboardCache = new Map<string, { data: unknown; expiresAt: number }>();
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+/**
+ * Clears the cached dashboard data.
+ *
+ * @param userId - Optional specific user ID to clear cache for. If omitted, clears all cache.
+ */
+export function clearDashboardCache(userId?: number): void {
+  if (userId !== undefined) {
+    dashboardCache.delete(`dashboard_${userId}`);
+  } else {
+    dashboardCache.clear();
+  }
+}
+
 /**
  * Use case: Compile all Carbon Intelligence Dashboard data for a user.
  *
@@ -65,7 +81,7 @@ export class GetDashboardData {
     private activityRepository: IActivityRepository,
     private userRepository: IUserRepository,
     private goalRepository: IGoalRepository
-  ) {}
+  ) { }
 
   /**
    * Execute the dashboard data compilation.
@@ -75,6 +91,12 @@ export class GetDashboardData {
    * @throws Error if the user is not found.
    */
   async execute(userId: number): Promise<DashboardData> {
+    const cacheKey = `dashboard_${userId}`;
+    const cached = dashboardCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data as DashboardData;
+    }
+
     const user = await this.userRepository.findById(userId);
     if (!user) throw new Error('User not found.');
 
@@ -103,11 +125,13 @@ export class GetDashboardData {
     let monthlyEmissions = 0;
 
     for (const a of allActivities) {
-      const t = new Date(a.timestamp);
+      // Repository mapping already converts timestamp to a Date.
+      const t = a.timestamp;
       monthlyEmissions += a.co2Emissions;
       if (t >= startOfWeek) weeklyEmissions += a.co2Emissions;
       if (t >= startOfToday) todayEmissions += a.co2Emissions;
     }
+
 
     // 3. Annual projection — proportional to actual tracked days (not always 30)
     //    Use min(30, days since account creation) as the denominator so new users
@@ -128,31 +152,30 @@ export class GetDashboardData {
       breakdownMap[c.category] = c.totalEmissions;
     });
 
-    const categoryBreakdown = categories.map(cat => {
-      const emissions = breakdownMap[cat];
-      const percentage = monthlyEmissions > 0 ? Math.round((emissions / monthlyEmissions) * 100) : 0;
-      return {
-        category: cat,
-        emissions: Math.round(emissions * 10) / 10,
-        percentage
-      };
-    });
-
-    // 5. Highest / lowest category sources (last 30 days)
     let highestSourceCat: ActivityCategory | 'None' = 'None';
     let highestSourceVal = -1;
     let lowestSourceCat: ActivityCategory | 'None' = 'None';
     let lowestSourceVal = Infinity;
 
-    categoryBreakdown.forEach(item => {
-      if (item.emissions > highestSourceVal && item.emissions > 0) {
-        highestSourceVal = item.emissions;
-        highestSourceCat = item.category;
+    const categoryBreakdown = categories.map(cat => {
+      const emissions = breakdownMap[cat];
+      const roundedEmissions = Math.round(emissions * 10) / 10;
+      const percentage = monthlyEmissions > 0 ? Math.round((emissions / monthlyEmissions) * 100) : 0;
+
+      if (roundedEmissions > highestSourceVal && roundedEmissions > 0) {
+        highestSourceVal = roundedEmissions;
+        highestSourceCat = cat;
       }
-      if (item.emissions < lowestSourceVal && item.emissions > 0) {
-        lowestSourceVal = item.emissions;
-        lowestSourceCat = item.category;
+      if (roundedEmissions < lowestSourceVal && roundedEmissions > 0) {
+        lowestSourceVal = roundedEmissions;
+        lowestSourceCat = cat;
       }
+
+      return {
+        category: cat,
+        emissions: roundedEmissions,
+        percentage
+      };
     });
 
     if (highestSourceVal === -1) highestSourceVal = 0;
@@ -218,7 +241,7 @@ export class GetDashboardData {
       }
     }
 
-    return {
+    const result = {
       sustainabilityScore,
       emissions: {
         today: Math.round(todayEmissions * 10) / 10,
@@ -257,5 +280,8 @@ export class GetDashboardData {
       },
       currentGoal
     };
+
+    dashboardCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+    return result;
   }
 }

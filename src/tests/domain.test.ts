@@ -75,7 +75,7 @@ describe('Activity entity', () => {
     const activity: Activity = {
       id: 1,
       userId: 1,
-      category: 'transport' as ActivityCategory,
+      category: 'transport',
       subcategory: 'car_petrol',
       quantity: 100,
       unit: 'km',

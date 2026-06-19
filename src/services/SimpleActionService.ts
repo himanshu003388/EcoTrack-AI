@@ -31,6 +31,14 @@ const ACTIONS_CATALOG: SimpleAction[] = [
 ];
 
 export class SimpleActionService {
+  /**
+   * Selects a recommended simple action of the day for the user.
+   * Uses the user's logged activities to find their highest-emission category,
+   * then picks a relevant action from the catalog based on the day of the year.
+   *
+   * @param userActivities - List of all user activities.
+   * @returns An object containing the selected SimpleAction and a contextual reason string.
+   */
   static getDailyAction(userActivities: Activity[]): { action: SimpleAction; reason: string } {
     const today = new Date();
     const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
@@ -38,22 +46,23 @@ export class SimpleActionService {
     const categoryTotals: Record<ActivityCategory, number> = {
       transport: 0, energy: 0, food: 0, shopping_waste: 0
     };
-    for (const act of userActivities) {
-      categoryTotals[act.category] = (categoryTotals[act.category] || 0) + act.co2Emissions;
+    for (let i = 0; i < userActivities.length; i++) {
+      categoryTotals[userActivities[i].category] += userActivities[i].co2Emissions;
     }
 
     let highestCategory: string = 'general';
     let highestVal = 0;
-    (Object.keys(categoryTotals) as ActivityCategory[]).forEach(cat => {
+    const cats: ActivityCategory[] = ['transport', 'energy', 'food', 'shopping_waste'];
+    for (let i = 0; i < cats.length; i++) {
+      const cat = cats[i];
       if (categoryTotals[cat] > highestVal) {
         highestVal = categoryTotals[cat];
         highestCategory = cat;
       }
-    });
+    }
 
     const relevantActions = ACTIONS_CATALOG.filter(a => a.category === highestCategory || highestCategory === 'general');
-    const fallbackActions = ACTIONS_CATALOG;
-    const pool = relevantActions.length > 0 ? relevantActions : fallbackActions;
+    const pool = relevantActions;
 
     const index = dayOfYear % pool.length;
     const action = pool[index];
@@ -66,6 +75,11 @@ export class SimpleActionService {
     return { action, reason };
   }
 
+  /**
+   * Retrieves the entire catalog of simple carbon-saving actions.
+   *
+   * @returns Array of all available SimpleAction items.
+   */
   static getAllActions(): SimpleAction[] {
     return ACTIONS_CATALOG;
   }
