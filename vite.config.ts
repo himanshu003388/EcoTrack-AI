@@ -42,6 +42,7 @@ export default defineConfig({
         'src/domain/entities/**',
         'src/domain/repositories/**',
         'src/types/**',
+        'src/config/**',
         '*.config.ts',
         '*.config.js',
       ],
