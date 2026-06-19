@@ -209,10 +209,10 @@ src/
 ## Technical Stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v3, Recharts, TanStack React Query v5, React Router v7, Lucide React, Framer Motion
-- **Backend**: Node.js, Express 4, TypeScript
-- **Security**: Helmet CSP with nonces, CORS, express-rate-limit (general 100/15min, write 20/min, chat 10/min, auth 30/15min), Zod input validation with size caps (quantity ≤ 100,000, message ≤ 500 chars, goal ≤ 10,000 kg), CSRF double-submit cookie with timing-safe comparison, XSS sanitizer (strips `<script>`, event handlers, `javascript:`, `data:` URIs, null bytes, prototype pollution keys), NaN guards on all route ID params, ISO date validation for query params, `in` operator guard on emission factor lookups
+- **Backend**: Node.js v22+, Express 4, TypeScript
+- **Security**: Helmet CSP with nonces, CORS, express-rate-limit (general 100/15min, write 20/min, chat 10/min, auth 30/15min), Zod input validation with size caps (quantity ≤ 100,000, message ≤ 500 chars, goal ≤ 10,000 kg), CSRF double-submit cookie with timing-safe comparison, XSS sanitizer (HTML entity decoding first, strips `<script>`, event handlers, `javascript:`, `data:` URIs, null bytes, prototype pollution keys), NaN guards on all route ID params, ISO date validation for query params, `in` operator guard on emission factor lookups
 - **Database**: PostgreSQL (Production) / SQLite3 (Development/Testing fallback)
-- **Testing**: Vitest, Supertest, @testing-library/react, jest-axe — **323 tests across 15 suites** (100% statement/branch/function/line coverage)
+- **Testing**: Vitest, Supertest, @testing-library/react, jest-axe — **343 tests across 17 suites** (100% statement/branch/function/line coverage)
 
 ---
 
@@ -221,8 +221,8 @@ src/
 | Protection                       | Implementation                                                                                                                                                                                                             |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **XSS Prevention**               | `sanitize.ts` middleware strips `<script>`, `<style>`, inline event handlers, `javascript:` and `data:` URI protocols from all body/query/param strings. HTML entity decoding before sanitization catches encoded bypasses |
-| **Prototype Pollution Guard**    | `__proto__`, `constructor`, `prototype` keys are stripped from all request bodies — prevents CWE-1321 attacks                                                                                                              |
-| **Null Byte Injection**          | Null bytes stripped from all string inputs — prevents CWE-158 bypass of file extension checks                                                                                                                              |
+| **Prototype Pollution Guard**    | `__proto__`, `constructor`, `prototype` keys are stripped from all request bodies — prevents prototype pollution (CWE-1321) attacks                                                                                        |
+| **Null Byte Injection**          | Null bytes stripped from all string inputs — prevents null byte injection (CWE-158) bypasses                                                                                                                               |
 | **Input Size Caps**              | Activity quantity ≤ 100,000; chat messages ≤ 500 chars; goal targets ≤ 10,000 kg/month — prevents payload abuse                                                                                                            |
 | **Body Size Limit**              | `express.json({ limit: '10kb' })` — strict limit prevents oversized payload DoS                                                                                                                                            |
 | **Rate Limiting**                | General API: 100 req/15min; Write endpoints (POST/DELETE): 20 req/min; Chat: 10 req/min; Auth: 30 req/15min                                                                                                                |
@@ -233,15 +233,15 @@ src/
 | **Future Timestamp Guard**       | Activities cannot be logged with future timestamps — enforced at use-case level                                                                                                                                            |
 | **Helmet CSP with Nonces**       | `script-src 'self'` + per-request nonce; `style-src 'self'` + nonce; `object-src 'none'`; `base-uri 'self'`; `form-action 'self'`; `frame-ancestors 'none'`                                                                |
 | **HSTS Preload**                 | `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`                                                                                                                                                  |
-| **Docker Security**              | Multi-stage build, `node:20-slim` base, non-root `ecotrack` user, HEALTHCHECK                                                                                                                                              |
+| **Docker Security**              | Multi-stage build, `node:22-slim` base, non-root `ecotrack` user, HEALTHCHECK                                                                                                                                              |
 | **Logger Redaction**             | Sensitive keys (`password`, `secret`, `token`, `authorization`) automatically redacted in production                                                                                                                       |
 | **Startup Warnings**             | Logs warning if `AUTH_REQUIRED` not set in production; logs warning if `JWT_SECRET` is missing; logs warning if SQLite used in production                                                                                  |
-| **Error Boundary**               | Never renders `error.message` in DOM — prevents CWE-209 information exposure                                                                                                                                               |
-| **SQL Injection Prevention**     | All queries use parameterized statements — no string interpolation in SQL expressions                                                                                                                                      |
+| **Error Boundary**               | Never renders `error.message` in DOM — prevents information exposure (CWE-209)                                                                                                                                             |
+| **SQL Injection Prevention**     | All queries use parameterized statements — no string interpolation in SQL expressions (CWE-89)                                                                                                                             |
 | **Challenge Cache Invalidation** | `ChallengeRepository.invalidateCache()` called on join/complete — ensures fresh data without restart                                                                                                                       |
 | **Emission Factor Safety**       | `in` operator guard on factor lookups prevents runtime errors from malformed config                                                                                                                                        |
 
-> **Architecture Note**: EcoTrack AI is designed as a single-user personal carbon tracker. In production, `AUTH_REQUIRED=true` enforces JWT authentication. Without it, `NODE_ENV === 'production'` automatically rejects unauthenticated requests. For multi-user deployments, swap the stub identity in `src/presentation/api/middleware/auth.ts`.
+> **Architecture Note**: EcoTrack AI is designed as a single-user personal carbon tracker. In production, setting `AUTH_REQUIRED=true` enforces strict JWT authentication. If `AUTH_REQUIRED` is unset/not true, `NODE_ENV === 'production'` will require JWT by default, unless explicitly overridden with `AUTH_REQUIRED=false` (e.g. to enable permissive anonymous testing/demo mode on Cloud Run/hosting environments). For multi-user deployments, swap the stub identity in `src/presentation/api/middleware/auth.ts`.
 
 ### OWASP Top 10 (2021) Coverage
 
@@ -270,7 +270,7 @@ Key CWEs mitigated: **CWE-79** (XSS), **CWE-89** (SQL Injection), **CWE-1321** (
 | **ESLint security**   | `@typescript-eslint` rules: `no-explicit-any`, `no-floating-promises`, strict null checks           |
 | **TypeScript strict** | `strict: true`, `noUncheckedIndexedAccess`, `noImplicitReturns` — eliminates entire classes of bugs |
 | **Helmet**            | HTTP headers: CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy                   |
-| **Docker**            | Multi-stage build, `node:20-slim`, non-root `ecotrack` user, HEALTHCHECK                            |
+| **Docker**            | Multi-stage build, `node:22-slim`, non-root `ecotrack` user, HEALTHCHECK                            |
 
 ---
 
